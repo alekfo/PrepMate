@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Результаты — PrepMate{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  <h1>Результаты интервью</h1>
+  <p class="report-meta">
+    {% if session.job_title %}{{ session.job_title }}{% endif %}
+    {% if session.company_name %} · {{ session.company_name }}{% endif %}
+    · {{ session.created_at|date:"d.m.Y" }}
+  </p>
+
+  {% if session.overall_score %}
+    <div class="score-card">
+      <div class="score-number">{{ session.overall_score|floatformat:1 }}</div>
+      <div class="score-details">
+        <span class="score-label">Общий балл</span>
+        <span class="score-sublabel">из 10 возможных</span>
+      </div>
+    </div>
+  {% endif %}
+
+  {% for q in questions %}
+    <div class="question-block">
+
+      <div class="question-number">Вопрос {{ forloop.counter }}</div>
+
+      <span class="badge">
+        {% if q.question_type == 'technical' %}Технический
+        {% elif q.question_type == 'behavioral' %}Поведенческий
+        {% else %}Ситуационный{% endif %}
+      </span>
+
+      <p class="question-text">{{ q.text }}</p>
+
+      {% if q.answer %}
+        <div class="answer-block">{{ q.answer.text }}</div>
+
+        {% if q.answer.feedback %}
+          {% with f=q.answer.feedback %}
+            <div class="score-pill">{{ f.score }} / 10</div>
+
+            <div class="feedback-grid">
+              {% if f.strengths %}
+                <div class="feedback-col">
+                  <h4>Сильные стороны</h4>
+                  <ul>
+                    {% for s in f.strengths %}<li>{{ s }}</li>{% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
+              {% if f.improvements %}
+                <div class="feedback-col">
+                  <h4>Что улучшить</h4>
+                  <ul>
+                    {% for i in f.improvements %}<li>{{ i }}</li>{% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
+            </div>
+
+            <p class="ideal-hint">{{ f.ideal_answer_hint }}</p>
+          {% endwith %}
+        {% else %}
+          <p style="font-size:13px; color:var(--text-secondary);">Оценка не получена.</p>
+        {% endif %}
+
+      {% else %}
+        <p style="font-size:13px; color:var(--text-secondary);">Ответ не был дан.</p>
+      {% endif %}
+
+    </div>
+  {% endfor %}
+
+  <a href="{% url 'interviews:index' %}" class="btn btn-secondary" style="margin-top: 40px;">Новое интервью</a>
+
+</div>
+{% endblock %}

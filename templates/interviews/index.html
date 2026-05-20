@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block spinner_text %}Генерируем вопросы...{% endblock %}
+
+{% block title %}PrepMate — Подготовка к интервью{% endblock %}
+
+{% block content %}
+<div class="page">
+  <h1>Подготовка к интервью</h1>
+  <p class="subtitle">Вставьте текст вакансии — AI сгенерирует 8 персональных вопросов и оценит каждый ваш ответ.</p>
+
+  {% if user.is_authenticated %}
+    <form method="post" action="{% url 'interviews:start' %}" id="startForm">
+      {% csrf_token %}
+      <label for="vacancy_text">Текст вакансии</label>
+      <textarea
+        id="vacancy_text"
+        name="vacancy_text"
+        rows="14"
+        placeholder="Вставьте описание вакансии сюда..."
+        {% if limit_reached %}disabled{% endif %}
+        required
+      ></textarea>
+
+      {% if limit_reached %}
+        <div class="limit-wrapper">
+          <button type="button" class="btn btn-disabled" disabled>Начать интервью</button>
+          <span class="limit-tooltip">Дневной лимит исчерпан — возвращайтесь завтра</span>
+        </div>
+      {% else %}
+        <button type="submit" class="btn" id="startBtn">Начать интервью</button>
+      {% endif %}
+    </form>
+
+    {% if not limit_reached %}
+    <script>
+      document.getElementById('startForm').addEventListener('submit', function () {
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('spinnerOverlay').classList.add('active');
+      });
+    </script>
+    {% endif %}
+  {% else %}
+    <p style="color: var(--text-secondary);">
+      <a href="{% url 'users:login' %}">Войдите</a> или
+      <a href="{% url 'users:register' %}">зарегистрируйтесь</a>, чтобы начать.
+    </p>
+  {% endif %}
+</div>
+{% endblock %}

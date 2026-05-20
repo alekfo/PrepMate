@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Регистрация — PrepMate{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <h1>Регистрация</h1>
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+      <div class="form-group">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+        {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+    {% endfor %}
+    <button type="submit" class="btn">Зарегистрироваться</button>
+  </form>
+  <span class="auth-link">Уже есть аккаунт? <a href="{% url 'users:login' %}">Войти</a></span>
+</div>
+{% endblock %}
