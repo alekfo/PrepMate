@@ -26,7 +26,7 @@ users/            — кастомная модель пользователя
   forms.py        — RegisterForm (кастомная, для users.User)
   admin.py        — CustomUserAdmin
 templates/
-  base.html       — навбар, подключение CSS, spinner overlay
+  base.html       — навбар (бренд, username, выйти, бургер-меню), spinner overlay
   interviews/     — index, question, report, history
   users/          — login, register
 static/css/main.css — минималистичный стиль (Inter, нейтральная палитра)
@@ -78,6 +78,7 @@ OneToOne → UserAnswer. Хранит: score (1–10), strengths (JSON), improve
 **`generate_questions(vacancy_text)`** — 1 запрос при старте сессии.
 Возвращает `{"job_title": ..., "company_name": ..., "questions": [{text, type}, ...]}`.
 Модель и ключ берутся из `settings.CLAUDE_MODEL` / `settings.CLAUDE_API_KEY`.
+Промпт явно инструктирует варьировать формулировки и углы — для вариативности при повторных запусках одной вакансии (temperature у Claude фиксирован на max=1.0, промпт эффективнее).
 
 **`evaluate_answer(question_text, answer_text, vacancy_context)`** — 1 запрос после каждого ответа.
 Возвращает `{"score": 1-10, "strengths": [...], "improvements": [...], "ideal_answer_hint": ...}`.
@@ -106,6 +107,19 @@ DB_PORT=5432
 InterviewSession.objects.filter(user=user, created_at__date=timezone.localdate()).count()
 ```
 Если `used_today >= user.interviews_limit_per_day` — кнопка «Начать интервью» блокируется в UI и `start` view возвращает 302 с сообщением об ошибке.
+
+## Навигация
+
+Навбар в `base.html`: бренд слева, справа — username, кнопка «Выйти», бургер-меню `≡`.
+Бургер-меню — кастомный dropdown (чистый JS, без библиотек), закрывается кликом мимо.
+Пункты меню: **История** (активна), **Статистика** (заглушка, `--disabled`), **Настройки** (заглушка, `--disabled`).
+При добавлении нового раздела — добавить `<a>` или `<span>` в `#navDropdown` в `base.html`.
+
+## Страница index (форма вакансии)
+
+`index` view передаёт в шаблон `past_vacancies` — до 5 последних уникальных сессий пользователя (дедупликация по `vacancy_text` в Python).
+В шаблоне: над textarea строка с лейблом и dropdown «Из истории» справа — при выборе подставляет текст вакансии в поле.
+Textarea: `rows=4`, авторастягивается по мере ввода (JS `autoGrow`), `resize: none`.
 
 ## Важные детали
 

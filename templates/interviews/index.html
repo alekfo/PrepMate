@@ -7,17 +7,35 @@
 {% block content %}
 <div class="page">
   <h1>Подготовка к интервью</h1>
-  <p class="subtitle">Вставьте текст вакансии — AI сгенерирует 8 персональных вопросов и оценит каждый ваш ответ.</p>
+  <p class="subtitle">Вставьте текст вакансии — AI сгенерирует 8 персональных вопросов и даст подробный отчет по каждому Вашему ответу.</p>
 
   {% if user.is_authenticated %}
     <form method="post" action="{% url 'interviews:start' %}" id="startForm">
       {% csrf_token %}
-      <label for="vacancy_text">Текст вакансии</label>
+
+      <div class="vacancy-label-row">
+        <label for="vacancy_text">Текст вакансии</label>
+        {% if past_vacancies %}
+          <div class="vacancy-history-wrap">
+            <select id="vacancyHistory" class="vacancy-history-select">
+              <option value="">Из истории</option>
+              {% for s in past_vacancies %}
+                <option value="{{ s.vacancy_text }}">
+                  {% if s.job_title %}{{ s.job_title }}{% if s.company_name %} · {{ s.company_name }}{% endif %}
+                  {% elif s.company_name %}{{ s.company_name }}
+                  {% else %}{{ s.vacancy_text|truncatechars:40 }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endif %}
+      </div>
       <textarea
         id="vacancy_text"
         name="vacancy_text"
-        rows="14"
+        rows="4"
         placeholder="Вставьте описание вакансии сюда..."
+        style="resize: none; overflow: hidden;"
         {% if limit_reached %}disabled{% endif %}
         required
       ></textarea>
@@ -32,14 +50,34 @@
       {% endif %}
     </form>
 
-    {% if not limit_reached %}
     <script>
+      const textarea = document.getElementById('vacancy_text');
+
+      function autoGrow() {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+      }
+
+      textarea.addEventListener('input', autoGrow);
+
+      const historySelect = document.getElementById('vacancyHistory');
+      if (historySelect) {
+        historySelect.addEventListener('change', function () {
+          if (this.value) {
+            textarea.value = this.value;
+            autoGrow();
+            textarea.focus();
+          }
+        });
+      }
+
+      {% if not limit_reached %}
       document.getElementById('startForm').addEventListener('submit', function () {
         document.getElementById('startBtn').disabled = true;
         document.getElementById('spinnerOverlay').classList.add('active');
       });
+      {% endif %}
     </script>
-    {% endif %}
   {% else %}
     <p style="color: var(--text-secondary);">
       <a href="{% url 'users:login' %}">Войдите</a> или

@@ -15,17 +15,43 @@
 <nav>
   <a href="{% url 'interviews:index' %}" class="nav-brand">PrepMate</a>
   {% if user.is_authenticated %}
-    <a href="{% url 'interviews:history' %}">История</a>
-    <span>{{ user.username }}</span>
+    <span class="nav-username">{{ user.username }}</span>
     <form method="post" action="{% url 'users:logout' %}" style="display:inline;">
       {% csrf_token %}
       <button type="submit" class="btn btn-secondary" style="margin-top:0; padding: 6px 14px; font-size:13.5px;">Выйти</button>
     </form>
+    <div class="nav-menu-wrap" id="navMenuWrap">
+      <button class="nav-menu-btn" id="navMenuBtn" aria-label="Меню" aria-expanded="false">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="nav-dropdown" id="navDropdown">
+        <a href="{% url 'interviews:history' %}" class="nav-dropdown-item">История</a>
+        <span class="nav-dropdown-item nav-dropdown-item--disabled">Статистика <span class="nav-dropdown-badge">Скоро</span></span>
+        <span class="nav-dropdown-item nav-dropdown-item--disabled">Настройки <span class="nav-dropdown-badge">Скоро</span></span>
+      </div>
+    </div>
   {% else %}
     <a href="{% url 'users:login' %}">Войти</a>
     <a href="{% url 'users:register' %}">Регистрация</a>
   {% endif %}
 </nav>
+
+<script>
+  (function () {
+    var btn = document.getElementById('navMenuBtn');
+    var wrap = document.getElementById('navMenuWrap');
+    if (!btn) return;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = wrap.classList.toggle('open');
+      btn.setAttribute('aria-expanded', open);
+    });
+    document.addEventListener('click', function () {
+      wrap.classList.remove('open');
+      btn.setAttribute('aria-expanded', false);
+    });
+  })();
+</script>
 
 {% if messages %}
   <div class="page" style="margin-bottom: 0; margin-top: 24px;">

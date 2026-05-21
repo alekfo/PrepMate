@@ -10,13 +10,26 @@ from .services import generate_questions, evaluate_answer
 
 def index(request):
     limit_reached = False
+    past_vacancies = []
     if request.user.is_authenticated:
         used_today = InterviewSession.objects.filter(
             user=request.user,
             created_at__date=timezone.localdate(),
         ).count()
         limit_reached = used_today >= request.user.interviews_limit_per_day
-    return render(request, 'interviews/index.html', {'limit_reached': limit_reached})
+
+        seen = set()
+        for s in InterviewSession.objects.filter(user=request.user).order_by('-created_at'):
+            if s.vacancy_text not in seen:
+                seen.add(s.vacancy_text)
+                past_vacancies.append(s)
+            if len(past_vacancies) >= 5:
+                break
+
+    return render(request, 'interviews/index.html', {
+        'limit_reached': limit_reached,
+        'past_vacancies': past_vacancies,
+    })
 
 
 @login_required
