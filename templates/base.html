@@ -28,6 +28,7 @@
         <a href="{% url 'interviews:history' %}" class="nav-dropdown-item">История</a>
         <span class="nav-dropdown-item nav-dropdown-item--disabled">Статистика <span class="nav-dropdown-badge">Скоро</span></span>
         <span class="nav-dropdown-item nav-dropdown-item--disabled">Настройки <span class="nav-dropdown-badge">Скоро</span></span>
+        <span class="nav-dropdown-item nav-dropdown-item--disabled">О проекте <span class="nav-dropdown-badge">Скоро</span></span>
       </div>
     </div>
   {% else %}
@@ -64,6 +65,10 @@
 {% endif %}
 
 {% block content %}{% endblock %}
+
+<footer>
+  <a href="{% url 'users:contact' %}" class="footer-contact-link">Связаться с поддержкой</a>
+</footer>
 
 <div class="spinner-overlay" id="spinnerOverlay">
   <div class="spinner"></div>

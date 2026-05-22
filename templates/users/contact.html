@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Связаться с поддержкой — PrepMate{% endblock %}
+
+{% block content %}
+<div class="auth-card" style="max-width: 480px;">
+  <h1>Связаться с поддержкой</h1>
+  <p class="subtitle" style="margin-bottom: 28px;">Опишите проблему — отвечу в ближайшее время</p>
+
+  <form method="post" id="contact-form">
+    {% csrf_token %}
+    <div class="form-group">
+      <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+      {{ form.name }}
+      {% if form.name.errors %}<ul class="errorlist">{% for e in form.name.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    <div class="form-group">
+      <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+      {{ form.email }}
+      {% if form.email.errors %}<ul class="errorlist">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    <div class="form-group">
+      <label for="{{ form.message.id_for_label }}">{{ form.message.label }}</label>
+      {{ form.message }}
+      {% if form.message.errors %}<ul class="errorlist">{% for e in form.message.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+
+    <div style="display: flex; gap: 12px; margin-top: 4px;">
+      <button type="submit" class="btn">Отправить</button>
+      <a href="javascript:history.back()" class="btn btn-secondary" style="margin-top: 18px;">Назад</a>
+    </div>
+  </form>
+</div>
+
+{% if success %}
+<div class="contact-success-overlay" id="successOverlay">
+  <div class="contact-success-modal">
+    <div class="contact-success-icon">✓</div>
+    <h2>Сообщение отправлено</h2>
+    <p>Спасибо за обращение. Постараюсь ответить как можно быстрее.</p>
+    <a href="{% url 'interviews:index' %}" class="btn">На главную</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
