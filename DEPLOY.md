@@ -12,19 +12,12 @@
 
 ### 1. Подключиться к серверу
 
-Через веб-консоль DigitalOcean (Access → Launch Droplet Console) или SSH если работает.
+Через веб-консоль DigitalOcean (Access → Launch Droplet Console) или SSH.
 
 ### 2. Установить Docker
 
 ```bash
 apt update && apt install -y docker.io docker-compose-plugin
-```
-
-Проверить:
-
-```bash
-docker --version
-docker compose version
 ```
 
 ### 3. Склонировать репозиторий
@@ -43,7 +36,7 @@ nano .env
 Вставить и заполнить:
 
 ```env
-SECRET_KEY=           # длинная случайная строка, например: python3 -c "import secrets; print(secrets.token_hex(50))"
+SECRET_KEY=           # длинная случайная строка: python3 -c "import secrets; print(secrets.token_hex(50))"
 DEBUG=False
 ALLOWED_HOSTS=prepstats.pro
 
@@ -79,21 +72,32 @@ chmod +x init-ssl.sh entrypoint.sh
 ./init-ssl.sh alekfo772@gmail.com
 ```
 
-Скрипт сделает всё автоматически:
-- Создаст временный сертификат → nginx стартует
-- Let's Encrypt выдаст реальный сертификат
-- Nginx перезагрузится с реальным сертификатом
-- Поднимутся все сервисы (db, web, nginx, certbot)
+Скрипт:
+- Установит certbot на сервер (если ещё нет)
+- Получит сертификат Let's Encrypt через `--standalone`
+- Поднимет все сервисы (db, web, nginx)
 
-Занимает ~1–2 минуты. В конце выведет `Done! https://prepstats.pro`.
+Занимает ~1 минуту. В конце выведет `Done! https://prepstats.pro`.
 
-### 7. Проверить
+### 7. Настроить автообновление сертификата (один раз)
+
+```bash
+(crontab -l 2>/dev/null; echo "0 3 1 * * cd ~/PrepMate && docker compose stop nginx && certbot renew --quiet && docker compose start nginx") | crontab -
+```
+
+Проверить что добавилось:
+
+```bash
+crontab -l
+```
+
+### 8. Проверить
 
 ```bash
 docker compose ps
 ```
 
-Все 4 сервиса должны быть `running`: `db`, `web`, `nginx`, `certbot`.
+Все 3 сервиса должны быть `running`: `db`, `web`, `nginx`.
 
 Открыть в браузере: `https://prepstats.pro`
 
@@ -143,13 +147,19 @@ docker compose down -v
 
 ## SSL-сертификат
 
-Сертификат Let's Encrypt обновляется автоматически — контейнер `certbot` проверяет каждые 12 часов и обновляет за 30 дней до истечения.
+Сертификат Let's Encrypt хранится на хосте в `/etc/letsencrypt/` и монтируется в nginx read-only.
+
+Автообновление — crontab 1-го числа каждого месяца в 3:00:
+- Останавливает nginx (~1 сек даунтайм)
+- Обновляет сертификат
+- Запускает nginx обратно
 
 Вручную обновить:
 
 ```bash
-docker compose exec certbot certbot renew
-docker compose exec nginx nginx -s reload
+docker compose stop nginx
+certbot renew
+docker compose start nginx
 ```
 
 ---
@@ -160,6 +170,7 @@ docker compose exec nginx nginx -s reload
 Запрос → nginx:443 (HTTPS) → gunicorn:8000 → Django
                             ↘ /static/ → папка staticfiles
 nginx:80 → редирект на 443
-certbot → обновление сертификата каждые 12ч
+/etc/letsencrypt → монтируется в nginx read-only
+crontab → обновление сертификата 1 раз в месяц
 db → PostgreSQL (данные в docker volume)
 ```

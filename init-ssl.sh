@@ -8,32 +8,26 @@ if [ -z "$EMAIL" ]; then
   exit 1
 fi
 
-# Создаём временный самоподписной сертификат, чтобы nginx смог стартовать
-docker compose run --rm --entrypoint "" certbot sh -c "
-  mkdir -p /etc/letsencrypt/live/prepstats.pro &&
-  openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-    -keyout /etc/letsencrypt/live/prepstats.pro/privkey.pem \
-    -out  /etc/letsencrypt/live/prepstats.pro/fullchain.pem \
-    -subj '/CN=localhost'
-"
+# Install certbot on host if not present
+if ! command -v certbot &>/dev/null; then
+  apt update && apt install -y certbot
+fi
 
-# Запускаем nginx с временным сертификатом
-docker compose up -d nginx
+# Stop nginx to free port 80 for standalone challenge
+docker compose stop nginx 2>/dev/null || true
 
-# Получаем реальный сертификат Let's Encrypt
-docker compose run --rm --entrypoint "" certbot certbot certonly \
-  --webroot -w /var/www/certbot \
+# Get certificate from Let's Encrypt
+certbot certonly --standalone \
   --email "$EMAIL" \
   -d prepstats.pro \
   --agree-tos \
-  --non-interactive \
-  --force-renewal
+  --non-interactive
 
-# Перезагружаем nginx с реальным сертификатом
-docker compose exec nginx nginx -s reload
-
-# Запускаем все сервисы
+# Start all services
 docker compose up -d
 
 echo ""
 echo "Done! https://prepstats.pro"
+echo ""
+echo "Setup auto-renewal (run once):"
+echo "  (crontab -l 2>/dev/null; echo \"0 3 1 * * cd $(pwd) && docker compose stop nginx && certbot renew --quiet && docker compose start nginx\") | crontab -"
