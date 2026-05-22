@@ -1,14 +1,35 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth import login
+from django.contrib.auth import login, get_user_model
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.core import signing
 from django.core.mail import send_mail
 from django.conf import settings
 from .forms import RegisterForm, ContactForm
 
 
+def _send_confirmation_email(user, request):
+    token = signing.dumps({'uid': user.pk}, salt='email-confirm')
+    confirm_url = request.build_absolute_uri(f'/users/confirm-email/?token={token}')
+    send_mail(
+        subject='Подтверждение email — PrepStats',
+        message=(
+            f'Здравствуйте, {user.username}!\n\n'
+            f'Для подтверждения адреса электронной почты перейдите по ссылке:\n'
+            f'{confirm_url}\n\n'
+            f'Ссылка действительна 24 часа.\n'
+            f'Если вы не регистрировались в PrepStats — проигнорируйте письмо.'
+        ),
+        from_email=settings.EMAIL_HOST_USER,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+
 def _notify_admin_new_user(user):
     try:
         send_mail(
-            subject=f"Новый пользователь в PrepMate: {user.username}",
+            subject=f"Новый пользователь в PrepStats: {user.username}",
             message=(
                 f"Зарегистрировался новый пользователь.\n\n"
                 f"Логин: {user.username}\n"
@@ -30,14 +51,69 @@ def register(request):
             user = form.save()
             login(request, user)
             _notify_admin_new_user(user)
+            try:
+                _send_confirmation_email(user, request)
+                messages.info(
+                    request,
+                    f'Письмо с подтверждением email отправлено на {user.email}. Проверьте почту.',
+                )
+            except Exception:
+                pass
             return redirect('interviews:index')
     else:
         form = RegisterForm()
     return render(request, 'users/register.html', {'form': form})
 
 
+@login_required
+def settings_page(request):
+    return render(request, 'users/settings.html')
+
+
+@login_required
+def send_confirmation(request):
+    if request.method != 'POST':
+        return redirect('users:settings')
+    user = request.user
+    if not user.email:
+        messages.error(request, 'Укажите email в профиле перед подтверждением.')
+        return redirect('users:settings')
+    if user.email_confirmed:
+        return redirect('users:settings')
+    try:
+        _send_confirmation_email(user, request)
+        messages.success(request, f'Письмо с подтверждением отправлено на {user.email}.')
+    except Exception:
+        messages.error(request, 'Не удалось отправить письмо. Проверьте настройки email.')
+    return redirect('users:settings')
+
+
+def confirm_email(request):
+    token = request.GET.get('token', '')
+    try:
+        data = signing.loads(token, salt='email-confirm', max_age=86400)
+        User = get_user_model()
+        user = User.objects.get(pk=data['uid'])
+        user.email_confirmed = True
+        user.save(update_fields=['email_confirmed'])
+        messages.success(request, 'Email успешно подтверждён!')
+    except signing.SignatureExpired:
+        messages.error(request, 'Ссылка истекла. Запросите новое письмо.')
+    except (signing.BadSignature, Exception):
+        messages.error(request, 'Недействительная ссылка подтверждения.')
+    return redirect('users:settings')
+
+
 def privacy_policy(request):
     return render(request, 'users/privacy_policy.html')
+
+
+def public_offer(request):
+    return render(request, 'users/public_offer.html')
+
+
+def about(request):
+    return render(request, 'users/about.html')
 
 
 def contact(request):
@@ -63,7 +139,7 @@ def contact(request):
             )
             try:
                 send_mail(
-                    subject=f"Обращение от {username} в сервисе PrepMate",
+                    subject=f"Обращение от {username} в сервисе PrepStats",
                     message=body,
                     from_email=settings.EMAIL_HOST_USER,
                     recipient_list=[settings.SUPPORT_EMAIL],

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Регистрация — PrepMate{% endblock %}
+{% block title %}Регистрация — PrepStats{% endblock %}
 
 {% block content %}
 <div class="auth-card">
@@ -21,9 +21,10 @@
     <div class="privacy-policy-group">
       {{ form.privacy_policy }}
       <label for="{{ form.privacy_policy.id_for_label }}" class="privacy-policy-label">
-        Я ознакомлен(а) и согласен(на) с
+        Я ознакомлен(а) с
         <a href="{% url 'users:privacy_policy' %}" target="_blank">Политикой конфиденциальности</a>
-        и даю согласие на обработку персональных данных
+        и <a href="{% url 'users:public_offer' %}" target="_blank">Договором публичной оферты</a>,
+        согласен(на) с их условиями и даю согласие на обработку персональных данных
       </label>
     </div>
     {% if form.privacy_policy.errors %}
@@ -41,6 +42,7 @@
   (function () {
     var cb = document.getElementById('{{ form.privacy_policy.id_for_label }}');
     var btn = document.getElementById('submit-btn');
+    btn.disabled = !cb.checked;
     cb.addEventListener('change', function () {
       btn.disabled = !this.checked;
     });

@@ -37,6 +37,10 @@ def start(request):
     if request.method != 'POST':
         return redirect('interviews:index')
 
+    if not request.user.email_confirmed:
+        messages.error(request, 'Подтвердите email перед началом интервью.')
+        return redirect('interviews:index')
+
     used_today = InterviewSession.objects.filter(
         user=request.user,
         created_at__date=timezone.localdate(),

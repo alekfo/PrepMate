@@ -1,4 +1,4 @@
-# PrepMate — TODO
+# PrepStats — TODO
 
 ## Производительность и масштабируемость
 

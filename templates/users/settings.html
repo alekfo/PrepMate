@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page settings-page">
+  <h1>Настройки</h1>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Аккаунт</div>
+
+    <div class="settings-item">
+      <div class="settings-item-info">
+        <span class="settings-item-label">Email</span>
+        <span class="settings-item-desc">
+          {{ user.email|default:"—" }}
+          {% if user.email %}
+            {% if user.email_confirmed %}
+              <span class="email-status email-status--confirmed">Подтверждён</span>
+            {% else %}
+              <span class="email-status email-status--pending">Не подтверждён</span>
+            {% endif %}
+          {% endif %}
+        </span>
+      </div>
+      {% if user.email and not user.email_confirmed %}
+        <form method="post" action="{% url 'users:send_confirmation' %}" style="margin:0;">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-secondary settings-btn">Подтвердить</button>
+        </form>
+      {% endif %}
+    </div>
+
+    <div class="settings-item">
+      <div class="settings-item-info">
+        <span class="settings-item-label">Пароль</span>
+        <span class="settings-item-desc">Изменить текущий пароль аккаунта</span>
+      </div>
+      <a href="{% url 'users:password_change' %}" class="btn btn-secondary settings-btn">Сменить →</a>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">
+      Язык интерфейса
+      <span class="nav-dropdown-badge">Скоро</span>
+    </div>
+    <div class="settings-item settings-item--disabled">
+      <div class="settings-item-info">
+        <span class="settings-item-label">Выберите язык</span>
+        <span class="settings-item-desc">Русский и английский интерфейс</span>
+      </div>
+      <div class="settings-radio-group">
+        <label class="settings-radio-label">
+          <input type="radio" name="lang" value="ru" checked disabled> Русский
+        </label>
+        <label class="settings-radio-label">
+          <input type="radio" name="lang" value="en" disabled> English
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">
+      Подписка
+      <span class="nav-dropdown-badge">Скоро</span>
+    </div>
+    <div class="settings-item settings-item--disabled">
+      <div class="settings-item-info">
+        <span class="settings-item-label">Текущий план</span>
+        <span class="settings-item-desc">
+          {% if user.is_premium %}
+            Премиум · 5 интервью в день
+          {% elif user.is_subscribed %}
+            Базовый · 3 интервью в день
+          {% else %}
+            Бесплатный · 1 интервью в день
+          {% endif %}
+        </span>
+      </div>
+      <button class="btn btn-secondary settings-btn" disabled>Управлять</button>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Документы</div>
+    <div class="settings-item">
+      <span class="settings-item-label">Политика конфиденциальности</span>
+      <a href="{% url 'users:privacy_policy' %}" class="btn btn-secondary settings-btn" target="_blank">Открыть →</a>
+    </div>
+    <div class="settings-item">
+      <span class="settings-item-label">Договор публичной оферты</span>
+      <a href="{% url 'users:public_offer' %}" class="btn btn-secondary settings-btn" target="_blank">Открыть →</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

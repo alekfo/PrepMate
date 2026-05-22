@@ -497,6 +497,7 @@ input:focus {
 
 .vacancy-label-row label {
   margin-bottom: 0;
+  white-space: nowrap;
 }
 
 .vacancy-history-wrap {
@@ -522,6 +523,7 @@ input:focus {
 .vacancy-history-select {
   appearance: none;
   width: auto;
+  max-width: 200px;
   padding: 4px 26px 4px 10px;
   font-family: inherit;
   font-size: 12.5px;
@@ -545,31 +547,41 @@ input:focus {
   box-shadow: none;
 }
 
-/* ── Limit tooltip ── */
-.limit-wrapper {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 18px;
+/* ── Blocked button with hover tooltip ── */
+.btn-blocked-wrap {
   position: relative;
+  display: inline-block;
+  margin-top: 18px;
+  cursor: not-allowed;
 }
 
-.btn-disabled {
+.btn-blocked-wrap .btn {
+  pointer-events: none;
   opacity: 0.38;
   cursor: not-allowed;
-  pointer-events: none;
 }
 
-.limit-tooltip {
+.btn-tooltip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  white-space: nowrap;
   font-size: 12.5px;
   color: var(--text-secondary);
   padding: 6px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  white-space: nowrap;
-  animation: fadeIn 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  pointer-events: none;
+  transition: opacity 0.15s, visibility 0.15s;
+}
+
+.btn-blocked-wrap:hover .btn-tooltip {
+  visibility: visible;
+  opacity: 1;
 }
 
 @keyframes fadeIn {
@@ -821,6 +833,125 @@ footer a:hover {
   white-space: nowrap;
 }
 
+/* ── Settings ── */
+.settings-page h1 {
+  margin-bottom: 28px;
+}
+
+.settings-section {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.settings-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-item:last-child {
+  border-bottom: none;
+}
+
+.settings-item--disabled {
+  opacity: 0.5;
+}
+
+.settings-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-item-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 0;
+  display: inline;
+}
+
+.settings-item-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.settings-btn {
+  margin-top: 0;
+  padding: 6px 14px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.settings-radio-group {
+  display: flex;
+  gap: 20px;
+}
+
+.settings-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 0;
+  cursor: not-allowed;
+}
+
+.settings-radio-label input {
+  accent-color: var(--text);
+  cursor: not-allowed;
+  width: 14px;
+  height: 14px;
+}
+
+.email-status {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.email-status--confirmed {
+  background: #f0faf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.email-status--pending {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
 /* ── Contact success modal ── */
 .contact-success-overlay {
   position: fixed;
@@ -861,4 +992,111 @@ footer a:hover {
   color: var(--text-secondary);
   margin-bottom: 24px;
   line-height: 1.55;
+}
+
+/* ── Landing CTA ── */
+.landing-cta {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.landing-cta .btn {
+  margin-top: 0;
+}
+
+/* ── Mobile ── */
+@media (max-width: 600px) {
+
+  nav {
+    padding: 0 16px;
+    gap: 12px;
+  }
+
+  .nav-username {
+    display: none;
+  }
+
+  .page {
+    margin: 32px auto;
+    padding: 0 16px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  footer {
+    padding: 0 16px;
+  }
+
+  /* Score card */
+  .score-card {
+    padding: 20px 20px;
+    gap: 14px;
+  }
+
+  .score-number {
+    font-size: 40px;
+    letter-spacing: -2px;
+  }
+
+  /* Feedback grid → single column */
+  .feedback-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* History */
+  .history-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .history-meta {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Settings items → stack on mobile */
+  .settings-item {
+    flex-wrap: wrap;
+  }
+
+  .settings-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .settings-radio-group {
+    padding: 0;
+  }
+
+  /* Vacancy label row */
+  .vacancy-label-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* Tooltip — allow wrapping */
+  .btn-tooltip {
+    white-space: normal;
+    max-width: 240px;
+  }
+
+  /* Auth card */
+  .auth-card {
+    margin: 40px auto;
+  }
+
+  /* Contact modal */
+  .contact-success-modal {
+    padding: 32px 28px;
+  }
+
+  /* Privacy/offer page */
+  .privacy-page {
+    margin-top: 24px;
+  }
 }

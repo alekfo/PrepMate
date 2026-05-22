@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}PrepMate{% endblock %}</title>
+  <title>{% block title %}PrepStats{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
 <body>
 
 <nav>
-  <a href="{% url 'interviews:index' %}" class="nav-brand">PrepMate</a>
+  <a href="{% url 'interviews:index' %}" class="nav-brand">PrepStats</a>
   {% if user.is_authenticated %}
     <span class="nav-username">{{ user.username }}</span>
     <form method="post" action="{% url 'users:logout' %}" style="display:inline;">
@@ -27,11 +27,12 @@
       <div class="nav-dropdown" id="navDropdown">
         <a href="{% url 'interviews:history' %}" class="nav-dropdown-item">История</a>
         <span class="nav-dropdown-item nav-dropdown-item--disabled">Статистика <span class="nav-dropdown-badge">Скоро</span></span>
-        <span class="nav-dropdown-item nav-dropdown-item--disabled">Настройки <span class="nav-dropdown-badge">Скоро</span></span>
-        <span class="nav-dropdown-item nav-dropdown-item--disabled">О проекте <span class="nav-dropdown-badge">Скоро</span></span>
+        <a href="{% url 'users:settings' %}" class="nav-dropdown-item">Настройки</a>
+        <a href="{% url 'users:about' %}" class="nav-dropdown-item">О проекте</a>
       </div>
     </div>
   {% else %}
+    <a href="{% url 'users:about' %}">О проекте</a>
     <a href="{% url 'users:login' %}">Войти</a>
     <a href="{% url 'users:register' %}">Регистрация</a>
   {% endif %}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Вход — PrepMate{% endblock %}
+{% block title %}Вход — PrepStats{% endblock %}
 
 {% block content %}
 <div class="auth-card">
@@ -20,6 +20,7 @@
     {% endif %}
     <button type="submit" class="btn">Войти</button>
   </form>
+  <span class="auth-link"><a href="{% url 'users:password_reset' %}">Забыли пароль?</a></span>
   <span class="auth-link">Нет аккаунта? <a href="{% url 'users:register' %}">Зарегистрироваться</a></span>
 </div>
 {% endblock %}

@@ -2,12 +2,17 @@
 
 {% block spinner_text %}Генерируем вопросы...{% endblock %}
 
-{% block title %}PrepMate — Подготовка к интервью{% endblock %}
+{% block title %}PrepStats — Подготовка к интервью{% endblock %}
 
 {% block content %}
 <div class="page">
+  {% if user.is_authenticated %}
   <h1>Готов проверить себя?</h1>
-  <p class="subtitle">Вставьте текст вакансии — AI сгенерирует 8 персональных вопросов и даст подробный отчет по каждому Вашему ответу.</p>
+  <p class="subtitle">Вставьте текст вакансии — AI сгенерирует 8 персональных вопросов и даст подробный отчёт по каждому ответу.</p>
+  {% else %}
+  <h1>Начни свой карьерный путь здесь</h1>
+  <p class="subtitle">Подготовься к техническому собеседованию с AI — персональные вопросы по вакансии, оценка каждого ответа и подробный отчёт.</p>
+  {% endif %}
 
   {% if user.is_authenticated %}
     <form method="post" action="{% url 'interviews:start' %}" id="startForm">
@@ -36,14 +41,19 @@
         rows="4"
         placeholder="Вставьте описание вакансии сюда..."
         style="resize: none; overflow: hidden;"
-        {% if limit_reached %}disabled{% endif %}
+        {% if not user.email_confirmed or limit_reached %}disabled{% endif %}
         required
       ></textarea>
 
-      {% if limit_reached %}
-        <div class="limit-wrapper">
-          <button type="button" class="btn btn-disabled" disabled>Начать интервью</button>
-          <span class="limit-tooltip">Дневной лимит исчерпан — возвращайтесь завтра</span>
+      {% if not user.email_confirmed %}
+        <div class="btn-blocked-wrap">
+          <button type="button" class="btn">Начать интервью</button>
+          <span class="btn-tooltip">Сначала подтвердите email — Настройки → Аккаунт</span>
+        </div>
+      {% elif limit_reached %}
+        <div class="btn-blocked-wrap">
+          <button type="button" class="btn">Начать интервью</button>
+          <span class="btn-tooltip">Дневной лимит исчерпан — возвращайтесь завтра</span>
         </div>
       {% else %}
         <button type="submit" class="btn" id="startBtn">Начать интервью</button>
@@ -71,7 +81,7 @@
         });
       }
 
-      {% if not limit_reached %}
+      {% if user.email_confirmed and not limit_reached %}
       document.getElementById('startForm').addEventListener('submit', function () {
         document.getElementById('startBtn').disabled = true;
         document.getElementById('spinnerOverlay').classList.add('active');
@@ -79,10 +89,10 @@
       {% endif %}
     </script>
   {% else %}
-    <p style="color: var(--text-secondary);">
-      <a href="{% url 'users:login' %}">Войдите</a> или
-      <a href="{% url 'users:register' %}">зарегистрируйтесь</a>, чтобы начать.
-    </p>
+    <div class="landing-cta">
+      <a href="{% url 'users:register' %}" class="btn">Зарегистрироваться</a>
+      <a href="{% url 'users:login' %}" class="btn btn-secondary">Войти</a>
+    </div>
   {% endif %}
 </div>
 {% endblock %}
