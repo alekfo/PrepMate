@@ -27,23 +27,23 @@ else
     docker.io docker-compose docker-compose-v2 docker-doc \
     podman-docker containerd runc 2>/dev/null | cut -f1)
   if [ -n "$CONFLICT_PKGS" ]; then
-    apt remove -y $CONFLICT_PKGS
+    sudo apt remove -y $CONFLICT_PKGS
   else
     log "No conflicting packages found."
   fi
 
   log "Installing prerequisites..."
-  apt update
-  apt install -y ca-certificates curl
+  sudo apt update
+  sudo apt install -y ca-certificates curl
 
   log "Setting up Docker GPG key..."
-  install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  sudo install -m 0755 -d /etc/apt/keyrings
+  sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
     -o /etc/apt/keyrings/docker.asc
-  chmod a+r /etc/apt/keyrings/docker.asc
+  sudo chmod a+r /etc/apt/keyrings/docker.asc
 
   log "Adding Docker apt repository..."
-  tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+  sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
 Types: deb
 URIs: https://download.docker.com/linux/ubuntu
 Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
@@ -52,26 +52,28 @@ Architectures: $(dpkg --print-architecture)
 Signed-By: /etc/apt/keyrings/docker.asc
 EOF
 
-  apt update
-  apt install -y \
+  sudo apt update
+  sudo apt install -y \
     docker-ce docker-ce-cli containerd.io \
     docker-buildx-plugin docker-compose-plugin
 
-  systemctl enable docker
-  systemctl start docker
+  sudo systemctl enable docker
+  sudo systemctl start docker
+  sudo usermod -aG docker "$USER"
   log "Docker installed: $(docker --version)"
+  log "User $USER added to docker group — re-login needed for docker without sudo"
 fi
 
-if ! systemctl is-active --quiet docker; then
+if ! sudo systemctl is-active --quiet docker; then
   log "Starting Docker..."
-  systemctl start docker
+  sudo systemctl start docker
 fi
 
 # ─── 2. Install Certbot ───────────────────────────────────────────────────────
 
 if ! command -v certbot &>/dev/null; then
   log "Installing certbot..."
-  apt update && apt install -y certbot
+  sudo apt update && sudo apt install -y certbot
 fi
 
 # ─── 3. Obtain SSL certificate ────────────────────────────────────────────────
@@ -80,11 +82,11 @@ if [ -d "/etc/letsencrypt/live/$DOMAIN" ]; then
   warn "Certificate for $DOMAIN already exists — skipping certbot."
 else
   log "Stopping nginx to free port 80..."
-  docker compose stop nginx 2>/dev/null || true
-  fuser -k 80/tcp 2>/dev/null || true
+  sudo docker compose stop nginx 2>/dev/null || true
+  sudo fuser -k 80/tcp 2>/dev/null || true
 
   log "Obtaining certificate for $DOMAIN..."
-  certbot certonly \
+  sudo certbot certonly \
     --standalone \
     --non-interactive \
     --agree-tos \
@@ -97,10 +99,10 @@ fi
 # ─── 4. Start stack ───────────────────────────────────────────────────────────
 
 log "Building and starting Docker Compose stack..."
-docker compose up -d --build
+sudo docker compose up -d --build
 
 log "Verifying containers..."
-docker compose ps
+sudo docker compose ps
 
 echo ""
 echo -e "${GREEN}Done!${NC} https://$DOMAIN"
