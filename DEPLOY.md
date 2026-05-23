@@ -10,18 +10,34 @@
 
 ## Первый деплой (один раз)
 
-### 1. Подключиться к серверу
+### 1. Подключиться к серверу как root
 
-Через веб-консоль DigitalOcean (Access → Launch Droplet Console) или SSH.
+Через веб-консоль хостинга или SSH:
 
-### 2. Склонировать репозиторий
+```bash
+ssh root@<IP_сервера>
+```
+
+> **Важно:** весь первый деплой выполняется от root. Это избавляет от проблем с правами на docker, apt и certbot.
+
+### 2. Залогиниться в Docker Hub
+
+Нужно чтобы избежать лимита анонимных pull-запросов (100 в 6 часов на IP). Бесплатный аккаунт на [hub.docker.com](https://hub.docker.com):
+
+```bash
+docker login -u <твой_dockerhub_username>
+```
+
+> Если Docker ещё не установлен — `docker login` будет недоступен. Пропустите этот шаг, скрипт установит Docker сам. Вернитесь к нему если `docker compose up` упадёт с ошибкой rate limit.
+
+### 3. Склонировать репозиторий
 
 ```bash
 git clone https://github.com/<твой-username>/<репо>.git
 cd PrepMate
 ```
 
-### 3. Создать `.env`
+### 4. Создать `.env`
 
 ```bash
 nano .env
@@ -54,13 +70,13 @@ SUPPORT_EMAIL=        # куда приходят уведомления
 
 Сохранить: `Ctrl+O`, `Enter`, `Ctrl+X`.
 
-### 4. Выдать права на скрипты
+### 5. Выдать права на скрипты
 
 ```bash
 chmod +x init-ssl.sh entrypoint.sh
 ```
 
-### 5. Установить Docker, получить SSL и запустить всё
+### 6. Установить Docker, получить SSL и запустить всё
 
 ```bash
 ./init-ssl.sh alekfo772@gmail.com
@@ -75,7 +91,7 @@ chmod +x init-ssl.sh entrypoint.sh
 
 Занимает ~2 минуты. В конце выведет `Done! https://prepstats.pro`.
 
-### 6. Настроить автообновление сертификата (один раз)
+### 7. Настроить автообновление сертификата (один раз)
 
 ```bash
 (crontab -l 2>/dev/null; echo "0 3 1 * * cd ~/PrepMate && docker compose stop nginx && certbot renew --quiet && docker compose start nginx") | crontab -
@@ -87,7 +103,7 @@ chmod +x init-ssl.sh entrypoint.sh
 crontab -l
 ```
 
-### 7. Проверить
+### 8. Проверить
 
 ```bash
 docker compose ps
