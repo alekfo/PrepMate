@@ -14,20 +14,14 @@
 
 Через веб-консоль DigitalOcean (Access → Launch Droplet Console) или SSH.
 
-### 2. Установить Docker
-
-```bash
-apt update && apt install -y docker.io docker-compose-plugin
-```
-
-### 3. Склонировать репозиторий
+### 2. Склонировать репозиторий
 
 ```bash
 git clone https://github.com/<твой-username>/<репо>.git
 cd PrepMate
 ```
 
-### 4. Создать `.env`
+### 3. Создать `.env`
 
 ```bash
 nano .env
@@ -60,26 +54,28 @@ SUPPORT_EMAIL=        # куда приходят уведомления
 
 Сохранить: `Ctrl+O`, `Enter`, `Ctrl+X`.
 
-### 5. Выдать права на скрипты
+### 4. Выдать права на скрипты
 
 ```bash
 chmod +x init-ssl.sh entrypoint.sh
 ```
 
-### 6. Получить SSL и запустить всё
+### 5. Установить Docker, получить SSL и запустить всё
 
 ```bash
 ./init-ssl.sh alekfo772@gmail.com
 ```
 
-Скрипт:
-- Установит certbot на сервер (если ещё нет)
-- Получит сертификат Let's Encrypt через `--standalone`
-- Поднимет все сервисы (db, web, nginx)
+Скрипт делает всё по порядку:
+- Удаляет конфликтующие пакеты (`docker.io`, `containerd`, `runc` и др.)
+- Устанавливает Docker Engine из официального репозитория (`docker-ce`, `containerd.io`, `docker-compose-plugin`)
+- Устанавливает certbot (если ещё нет)
+- Получает сертификат Let's Encrypt через `--standalone`
+- Поднимает все сервисы (db, web, nginx)
 
-Занимает ~1 минуту. В конце выведет `Done! https://prepstats.pro`.
+Занимает ~2 минуты. В конце выведет `Done! https://prepstats.pro`.
 
-### 7. Настроить автообновление сертификата (один раз)
+### 6. Настроить автообновление сертификата (один раз)
 
 ```bash
 (crontab -l 2>/dev/null; echo "0 3 1 * * cd ~/PrepMate && docker compose stop nginx && certbot renew --quiet && docker compose start nginx") | crontab -
@@ -91,7 +87,7 @@ chmod +x init-ssl.sh entrypoint.sh
 crontab -l
 ```
 
-### 8. Проверить
+### 7. Проверить
 
 ```bash
 docker compose ps

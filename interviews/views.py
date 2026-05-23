@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -6,6 +8,8 @@ from django.db.models import Count, Q
 
 from .models import InterviewSession, Question, UserAnswer, Feedback
 from .services import generate_questions, evaluate_answer
+
+logger = logging.getLogger(__name__)
 
 
 def index(request):
@@ -46,6 +50,7 @@ def start(request):
         created_at__date=timezone.localdate(),
     ).count()
     if used_today >= request.user.interviews_limit_per_day:
+        logger.warning("Daily limit reached for user=%s (%d/%d)", request.user.username, used_today, request.user.interviews_limit_per_day)
         messages.error(request, 'Дневной лимит интервью исчерпан. Возвращайтесь завтра.')
         return redirect('interviews:index')
 
@@ -56,7 +61,8 @@ def start(request):
 
     try:
         data = generate_questions(vacancy_text)
-    except Exception:
+    except Exception as e:
+        logger.error("generate_questions failed for user=%s: %s", request.user.username, e)
         messages.error(request, 'Не удалось сгенерировать вопросы. Попробуйте ещё раз.')
         return redirect('interviews:index')
 
@@ -79,6 +85,7 @@ def start(request):
             order=order,
         )
 
+    logger.info("Session %d started: user=%s job=%r company=%r", session.id, request.user.username, session.job_title, session.company_name)
     return redirect('interviews:question', session_id=session.id, order=0)
 
 
@@ -114,6 +121,7 @@ def question(request, session_id, order):
             question=current_question,
             text=answer_text,
         )
+        logger.info("Answer saved: session=%d question=%d user=%s", session_id, order, request.user.username)
 
         try:
             feedback_data = evaluate_answer(
@@ -128,8 +136,8 @@ def question(request, session_id, order):
                 improvements=feedback_data['improvements'],
                 ideal_answer_hint=feedback_data['ideal_answer_hint'],
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("evaluate_answer failed: session=%d question=%d user=%s: %s", session_id, order, request.user.username, e)
 
         next_order = order + 1
         if next_order < total:
@@ -142,6 +150,7 @@ def question(request, session_id, order):
         session.completed_at = timezone.now()
         session.save()
 
+        logger.info("Session %d completed: user=%s score=%s", session.id, request.user.username, session.overall_score)
         return redirect('interviews:report', session_id=session.id)
 
     return render(request, 'interviews/question.html', {

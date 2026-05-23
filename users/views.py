@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render, redirect
 from django.contrib.auth import login, get_user_model
 from django.contrib.auth.decorators import login_required
@@ -6,6 +8,8 @@ from django.core import signing
 from django.core.mail import send_mail
 from django.conf import settings
 from .forms import RegisterForm, ContactForm
+
+logger = logging.getLogger(__name__)
 
 
 def _send_confirmation_email(user, request):
@@ -50,6 +54,7 @@ def register(request):
         if form.is_valid():
             user = form.save()
             login(request, user)
+            logger.info("New user registered: %s <%s>", user.username, user.email)
             _notify_admin_new_user(user)
             try:
                 _send_confirmation_email(user, request)
@@ -57,8 +62,8 @@ def register(request):
                     request,
                     f'Письмо с подтверждением email отправлено на {user.email}. Проверьте почту.',
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Confirmation email failed for user=%s: %s", user.username, e)
             return redirect('interviews:index')
     else:
         form = RegisterForm()
@@ -83,7 +88,9 @@ def send_confirmation(request):
     try:
         _send_confirmation_email(user, request)
         messages.success(request, f'Письмо с подтверждением отправлено на {user.email}.')
-    except Exception:
+        logger.info("Confirmation email sent to user=%s <%s>", user.username, user.email)
+    except Exception as e:
+        logger.error("Confirmation email failed for user=%s: %s", user.username, e)
         messages.error(request, 'Не удалось отправить письмо. Проверьте настройки email.')
     return redirect('users:settings')
 
@@ -96,10 +103,13 @@ def confirm_email(request):
         user = User.objects.get(pk=data['uid'])
         user.email_confirmed = True
         user.save(update_fields=['email_confirmed'])
+        logger.info("Email confirmed for user=%s", user.username)
         messages.success(request, 'Email успешно подтверждён!')
     except signing.SignatureExpired:
+        logger.warning("Expired email confirmation token for token=%.20s…", token)
         messages.error(request, 'Ссылка истекла. Запросите новое письмо.')
-    except (signing.BadSignature, Exception):
+    except (signing.BadSignature, Exception) as e:
+        logger.warning("Invalid email confirmation token: %s", e)
         messages.error(request, 'Недействительная ссылка подтверждения.')
     return redirect('users:settings')
 
@@ -145,8 +155,9 @@ def contact(request):
                     recipient_list=[settings.SUPPORT_EMAIL],
                     fail_silently=False,
                 )
-            except Exception:
-                pass
+                logger.info("Contact form submitted by %s <%s>", username, email)
+            except Exception as e:
+                logger.error("Contact email failed for %s <%s>: %s", username, email, e)
             return render(request, 'users/contact.html', {'form': ContactForm(initial=initial), 'success': True})
     else:
         form = ContactForm(initial=initial)
