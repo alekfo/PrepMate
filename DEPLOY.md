@@ -48,7 +48,7 @@ nano .env
 ```env
 SECRET_KEY=           # длинная случайная строка: python3 -c "import secrets; print(secrets.token_hex(50))"
 DEBUG=False
-ALLOWED_HOSTS=prepstats.pro
+ALLOWED_HOSTS=prepstats.pro,www.prepstats.pro
 
 DATABASE_URL=postgres
 DB_NAME=prepstats

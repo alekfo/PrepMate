@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /session/
+Disallow: /history/
+Disallow: /users/settings/
+Disallow: /users/send-confirmation/
+Disallow: /users/confirm-email/
+Disallow: /users/password-change/
+Disallow: /users/password-reset/
+
+Allow: /

@@ -12,5 +12,7 @@ python manage.py collectstatic --noinput
 
 exec gunicorn prep_mate.wsgi:application \
   --bind 0.0.0.0:8000 \
+  --worker-class gevent \
   --workers 2 \
+  --worker-connections 20 \
   --timeout 120
