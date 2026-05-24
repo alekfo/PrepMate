@@ -6,7 +6,8 @@
 
 - **Python 3.12**, **Django 6.0**
 - **SQLite** (dev) / **PostgreSQL** (prod, через `DATABASE_URL=postgres`)
-- **Anthropic SDK** — Claude API для генерации вопросов и оценки ответов
+- **requests** — HTTP-клиент для вызова Claude API через внешний прокси-сервис
+- **gevent** — асинхронные воркеры для gunicorn
 - **python-dotenv** — переменные окружения из `.env`
 - Фронтенд: чистые Django-шаблоны + CSS (без JS-фреймворков)
 
@@ -17,7 +18,7 @@ prep_mate/        — настройки Django (settings.py, urls.py, wsgi/asgi
 interviews/       — основное приложение
   models.py       — InterviewSession, Question, UserAnswer, Feedback
   views.py        — index, start, question, resume, history, report
-  services.py     — generate_questions(), evaluate_answer() (Claude API)
+  services.py     — generate_questions(), evaluate_answer() (Claude API через прокси)
   urls.py         — маршруты приложения
   admin.py        — регистрация моделей
 users/            — кастомная модель пользователя + auth-страницы
@@ -38,6 +39,7 @@ templates/
                     password_reset_email.txt (email-шаблон)
 static/css/main.css — минималистичный стиль (Inter/Outfit, нейтральная палитра)
                       включает медиазапросы для мобильных (≤ 600px)
+nginx/nginx.conf  — конфиг nginx: HTTPS, редирект www→apex, return 444 для чужих Host
 ```
 
 ## Модели
@@ -47,14 +49,16 @@ static/css/main.css — минималистичный стиль (Inter/Outfit,
 |---|---|---|---|
 | `email` | EmailField | — | Уникальный (unique=True), обязательный при регистрации |
 | `interviews_used` | PositiveIntegerField | 0 | Всего интервью запущено (инкремент при старте) |
-| `interviews_limit_per_day` | PositiveSmallIntegerField | 3 | Дневной лимит (настраивается в админке) |
+| `interviews_limit_per_day` | PositiveSmallIntegerField | 1 | Дневной лимит (настраивается в админке) |
 | `is_subscribed` | BooleanField | False | Базовая подписка |
 | `is_premium` | BooleanField | False | Расширенная подписка |
 | `email_confirmed` | BooleanField | False | Подтверждён ли email |
 
 ### interviews.InterviewSession
 Статусы: `pending` / `in_progress` / `completed`
-Хранит: текст вакансии, job_title, company_name, overall_score, created_at, completed_at
+Уровни: `common` (по умолчанию) / `junior` / `middle` / `pro`
+Хранит: текст вакансии, job_title, company_name, overall_score, level, created_at, completed_at
+Сортировка по умолчанию: `-created_at`
 
 ### interviews.Question
 Типы: `technical` / `behavioral` / `situational`
@@ -114,6 +118,7 @@ EMAIL_BACKEND = smtp.EmailBackend
 EMAIL_HOST = smtp.yandex.ru
 EMAIL_PORT = 465
 EMAIL_USE_SSL = True
+EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetView шлёт с webmaster@localhost
 ```
 
@@ -127,11 +132,13 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 
 ## Claude API — логика вызовов
 
-В `interviews/services.py` два публичных метода:
+В `interviews/services.py` два публичных метода. Claude вызывается **не напрямую через Anthropic SDK**, а через HTTP-прокси: `requests.post(settings.CLAUDE_API_SERVICE_URL, json={"prompt": ...}, timeout=60)`. Прокси возвращает `{"response": "..."}`.
 
-**`generate_questions(vacancy_text)`** — 1 запрос при старте сессии.
+Адрес прокси задаётся через `CLAUDE_API_SERVICE_URL` (по умолчанию `https://api.fieldlog.online/ask`).
+
+**`generate_questions(vacancy_text, level='common')`** — 1 запрос при старте сессии.
+При `level` ≠ `'common'` добавляет в промпт инструкцию по уровню из `_LEVEL_INSTRUCTIONS`.
 Возвращает `{"job_title": ..., "company_name": ..., "questions": [{text, type}, ...]}`.
-Модель и ключ берутся из `settings.CLAUDE_MODEL` / `settings.CLAUDE_API_KEY`.
 
 **`evaluate_answer(question_text, answer_text, vacancy_context)`** — 1 запрос после каждого ответа.
 Возвращает `{"score": 1-10, "strengths": [...], "improvements": [...], "ideal_answer_hint": ...}`.
@@ -144,8 +151,7 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 SECRET_KEY=...
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
-CLAUDE_API_KEY=sk-ant-...
-CLAUDE_MODEL=claude-sonnet-4-6
+CLAUDE_API_SERVICE_URL=https://api.fieldlog.online/ask   # прокси к Claude
 
 EMAIL_HOST=smtp.yandex.ru
 EMAIL_PORT=465
@@ -163,6 +169,40 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 # DB_PORT=5432
 ```
 
+## Инфраструктура (прод)
+
+**Домен:** `prepstats.pro` (www редиректит на apex)
+
+**Docker Compose** (`docker-compose.yml`):
+- `db` — postgres:16-alpine, данные в volume `postgres_data`
+- `web` — собственный образ, запускается через `entrypoint.sh`
+- `nginx` — nginx:alpine, порты 80/443, static через volume `static_files`
+
+**entrypoint.sh** при старте контейнера:
+1. Ждёт готовности PostgreSQL (polling через psycopg2)
+2. `python manage.py migrate --noinput`
+3. `python manage.py collectstatic --noinput`
+4. Запускает gunicorn: `gevent` воркеры, 2 workers, 20 connections, timeout 120s
+
+**nginx** (`nginx/nginx.conf`):
+- `default_server` на 80 и 443 → `return 444` (блокирует сканеры с чужим Host)
+- `prepstats.pro` → proxy_pass на `web:8000`, таймауты 60s/120s
+- `www.prepstats.pro` → редирект на apex
+- `/static/` отдаётся напрямую из volume
+- `/favicon.ico` и `/robots.txt` — статика без access_log
+
+**CI/CD** (`.github/workflows/ci.yml`):
+- `test` job: Python 3.12, pip cache, migrate, `python manage.py test interviews --verbosity=2`
+- `deploy` job: только при `push` в `main`, SSH → dump БД → сохранить логи → `git pull` → `docker compose build --no-cache web` → `docker compose up -d`
+- Деплой запускается только после успешного прохождения тестов (`needs: test`)
+
+## Логирование
+
+В `settings.py` настроен structured logging (формат `{asctime} {levelname} {name}: {message}`):
+- `interviews` и `users` логгеры: `DEBUG` в dev, `INFO` в prod
+- `django.request`: только `WARNING` и выше
+- `django.security.DisallowedHost`: подавлен (боты с чужим Host не засоряют логи — nginx их отбивает на уровне `return 444`)
+
 ## Навигация
 
 **Незалогиненный пользователь** (навбар): бренд → О проекте · Войти · Регистрация
@@ -178,6 +218,7 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 - `index` view передаёт `past_vacancies` — до 5 последних уникальных сессий (дедупликация по `vacancy_text`)
 - Dropdown «Из истории» подставляет текст вакансии в textarea через JS
 - Textarea: `rows=4`, авторастягивается (`autoGrow`), `resize: none`
+- Выбор уровня сложности (`junior` / `middle` / `pro`) — доступен только подписчикам (`is_subscribed` или `is_premium`); для остальных select задизейблен с hover-tooltip. Сервер валидирует подписку повторно в `start` view (игнорирует level если нет подписки).
 
 ## Страница настроек (`/users/settings/`)
 
@@ -201,10 +242,13 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 - Logout — только POST (Django 5+), в шаблоне обёрнут в `<form method="post">`
 - `resume` view — находит первый `Question` без `UserAnswer` через `filter(answer__isnull=True)`
 - `history` view — аннотирует queryset полями `total` и `answered` через `Count` + `Q`
-- Спиннер-оверлей определён в `base.html`, активируется JS через `.classList.add('active')`
+- Спиннер-оверлей определён в `base.html`, активируется через `activateSpinner(phrases)` — принимает массив фраз, перемешивает случайно, меняет текст каждые 2.8s с fade-анимацией
 - CSS адаптирован для мобильных через `@media (max-width: 600px)` в конце `main.css`
+- Карточки истории и блок score-card в отчёте окрашиваются по `overall_score`: `score--low` (< 2, красный), `score--mid` (2–7, жёлтый), `score--high` (> 7, зелёный) — переливающийся градиент через CSS `@keyframes score-shimmer`
+- В истории у каждой сессии под датой отображается уровень (`session.get_level_display`), если `level != 'common'`
+- `CSRF_TRUSTED_ORIGINS` — автоматически формируется из `ALLOWED_HOSTS` (исключая localhost)
 
-## Запуск
+## Запуск (dev)
 
 ```bash
 python manage.py migrate

@@ -11,7 +11,7 @@
     <div class="history-list">
       {% for session in sessions %}
         {% if session.status == 'completed' %}
-          <a href="{% url 'interviews:report' session_id=session.id %}" class="history-item">
+          <a href="{% url 'interviews:report' session_id=session.id %}" class="history-item {% if session.overall_score %}{% if session.overall_score < 2 %}score--low{% elif session.overall_score <= 7 %}score--mid{% else %}score--high{% endif %}{% endif %}">
         {% else %}
           <a href="{% url 'interviews:resume' session_id=session.id %}" class="history-item">
         {% endif %}
@@ -20,7 +20,9 @@
               {% if session.job_title %}{{ session.job_title }}{% else %}Без названия{% endif %}
               {% if session.company_name %}<span class="history-company"> · {{ session.company_name }}</span>{% endif %}
             </span>
-            <span class="history-date">{{ session.created_at|date:"d.m.Y" }}</span>
+            <span class="history-date">
+              {{ session.created_at|date:"d.m.Y" }}{% if session.level != 'common' %} · <span class="history-level">{{ session.get_level_display }}</span>{% endif %}
+            </span>
           </div>
           <div class="history-meta">
             {% if session.status == 'completed' %}
