@@ -1,7 +1,5 @@
 {% extends "base.html" %}
 
-{% block spinner_text %}Генерируем вопросы...{% endblock %}
-
 {% block title %}PrepStats — Подготовка к интервью{% endblock %}
 
 {% block content %}
@@ -84,7 +82,16 @@
       {% if user.email_confirmed and not limit_reached %}
       document.getElementById('startForm').addEventListener('submit', function () {
         document.getElementById('startBtn').disabled = true;
-        document.getElementById('spinnerOverlay').classList.add('active');
+        activateSpinner([
+          'Опрашиваем ведущих HR-специалистов...',
+          'Анализируем требования вакансии...',
+          'Фильтруем банальные вопросы...',
+          'Читаем между строк в описании...',
+          'Подбираем каверзные вопросы...',
+          'Консультируемся с опытными интервьюерами...',
+          'Отбрасываем вопросы про ваш главный недостаток...',
+          'Готовим вопросы, которые вас удивят...',
+        ]);
       });
       {% endif %}
     </script>

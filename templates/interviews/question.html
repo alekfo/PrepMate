@@ -52,7 +52,16 @@
     var answer = document.getElementById('answer_text').value.trim();
     if (!answer) return;
     document.getElementById('submitBtn').disabled = true;
-    document.getElementById('spinnerOverlay').classList.add('active');
+    activateSpinner([
+      'Изучаем ваш ответ внимательно...',
+      'Сверяемся с эталонными ответами...',
+      'Взвешиваем каждое слово...',
+      'Консультируемся с экспертами отрасли...',
+      'Ищем сильные стороны в ответе...',
+      'Сравниваем с лучшими практиками...',
+      'Формулируем конструктивный фидбек...',
+      'Подбираем точные рекомендации...',
+    ]);
   });
 </script>
 {% endblock %}
