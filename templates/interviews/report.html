@@ -11,9 +11,12 @@
     {% if session.company_name %} · {{ session.company_name }}{% endif %}
     · {{ session.created_at|date:"d.m.Y" }}
   </p>
+  {% if session.level != 'common' %}
+    <span class="badge badge--level">{{ session.get_level_display }}</span>
+  {% endif %}
 
   {% if session.overall_score %}
-    <div class="score-card">
+    <div class="score-card {% if session.overall_score < 2 %}score--low{% elif session.overall_score <= 7 %}score--mid{% else %}score--high{% endif %}">
       <div class="score-number">{{ session.overall_score|floatformat:1 }}</div>
       <div class="score-details">
         <span class="score-label">Общий балл</span>

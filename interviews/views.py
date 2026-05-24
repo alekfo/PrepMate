@@ -59,8 +59,12 @@ def start(request):
         messages.error(request, 'Вставьте текст вакансии.')
         return redirect('interviews:index')
 
+    raw_level = request.POST.get('level', '')
+    has_subscription = request.user.is_subscribed or request.user.is_premium
+    level = raw_level if (has_subscription and raw_level in ('junior', 'middle', 'pro')) else 'common'
+
     try:
-        data = generate_questions(vacancy_text)
+        data = generate_questions(vacancy_text, level)
     except Exception as e:
         logger.error("generate_questions failed for user=%s: %s", request.user.username, e)
         messages.error(request, 'Не удалось сгенерировать вопросы. Попробуйте ещё раз.')
@@ -72,6 +76,7 @@ def start(request):
         job_title=data.get('job_title', ''),
         company_name=data.get('company_name', ''),
         status='in_progress',
+        level=level,
     )
     request.user.__class__.objects.filter(pk=request.user.pk).update(
         interviews_used=request.user.interviews_used + 1
