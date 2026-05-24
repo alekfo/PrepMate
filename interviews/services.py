@@ -31,13 +31,34 @@ def _parse_json(text: str) -> dict | list:
     return json.loads(match.group(1) if match else text.strip())
 
 
-def generate_questions(vacancy_text: str) -> list[dict]:
-    logger.info("Generating questions for vacancy (%d chars)", len(vacancy_text))
+_LEVEL_INSTRUCTIONS = {
+    'junior': (
+        'Уровень кандидата: Junior (до 2 лет опыта). '
+        'Вопросы должны быть базового уровня — фундаментальные концепции, '
+        'простые практические задачи, понимание основ.'
+    ),
+    'middle': (
+        'Уровень кандидата: Middle (2–5 лет опыта). '
+        'Вопросы среднего уровня — системное мышление, типичные рабочие сценарии, '
+        'проектирование решений, понимание trade-off\'ов.'
+    ),
+    'pro': (
+        'Уровень кандидата: Senior/Pro (более 5 лет опыта). '
+        'Вопросы высокого уровня — архитектурные решения, сложные нестандартные сценарии, '
+        'масштабирование, технические решения в условиях жёстких ограничений.'
+    ),
+}
+
+
+def generate_questions(vacancy_text: str, level: str = 'common') -> list[dict]:
+    logger.info("Generating questions for vacancy (%d chars), level=%s", len(vacancy_text), level)
+    level_instruction = _LEVEL_INSTRUCTIONS.get(level, '')
+    level_line = f'\n{level_instruction}\n' if level_instruction else ''
     text = _ask(f"""Ты эксперт по техническим собеседованиям. Проанализируй вакансию и сгенерируй вопросы для интервью.
 
                         Вакансия:
                         {vacancy_text}
-
+{level_line}
                         Сгенерируй 8 вопросов: 5 технических, 2 поведенческих (STAR-метод), 1 ситуационный.
                         Каждый раз генерируй уникальный набор — варьируй формулировки, углы подхода, уровень глубины и конкретности. Избегай банальных и предсказуемых вопросов.
                         Также определи название должности и компанию из текста вакансии (если указаны).

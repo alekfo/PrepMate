@@ -548,6 +548,89 @@ input:focus {
 }
 
 /* ── Blocked button with hover tooltip ── */
+.level-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.level-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  text-transform: uppercase;
+  white-space: nowrap;
+  margin: 0;
+}
+
+.level-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.level-select-wrap::after {
+  content: '';
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid var(--text-secondary);
+  pointer-events: none;
+}
+
+.level-select {
+  appearance: none;
+  padding: 4px 26px 4px 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--surface);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.level-select:not(:disabled):hover {
+  border-color: #bbb;
+  color: var(--text);
+}
+
+.level-select:not(:disabled):focus {
+  border-color: var(--text);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.level-select--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.level-blocked-wrap {
+  position: relative;
+  display: inline-block;
+  cursor: not-allowed;
+}
+
+.level-blocked-wrap:hover .btn-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.badge--level {
+  margin-bottom: 20px;
+  display: inline-block;
+}
+
 .btn-blocked-wrap {
   position: relative;
   display: inline-block;
@@ -648,13 +731,14 @@ input:focus {
   background: var(--surface);
   text-decoration: none;
   color: var(--text);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s;
   gap: 16px;
 }
 
 .history-item:hover {
-  border-color: #bbb;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+  border-color: #999;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
 }
 
 .history-main {
@@ -693,6 +777,11 @@ input:focus {
 .history-score {
   font-size: 13px;
   font-weight: 600;
+  color: var(--text);
+}
+
+.history-level {
+  font-weight: 500;
   color: var(--text);
 }
 
@@ -1009,6 +1098,34 @@ footer a:hover {
 
 .landing-cta .btn {
   margin-top: 0;
+}
+
+/* ── Score color themes ── */
+@keyframes score-shimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.score--low {
+  background: linear-gradient(120deg, #ffe0e6, #ffc8d4, #ffe8ed, #ffc8d4, #ffe0e6) !important;
+  background-size: 300% 300% !important;
+  animation: score-shimmer 5s ease infinite;
+  border-color: #f5a0b5 !important;
+}
+
+.score--mid {
+  background: linear-gradient(120deg, #fff4d6, #ffe89a, #fffbee, #ffe89a, #fff4d6) !important;
+  background-size: 300% 300% !important;
+  animation: score-shimmer 5s ease infinite;
+  border-color: #f5cf6e !important;
+}
+
+.score--high {
+  background: linear-gradient(120deg, #ddf9ef, #c2f4e0, #edfaf5, #c2f4e0, #ddf9ef) !important;
+  background-size: 300% 300% !important;
+  animation: score-shimmer 5s ease infinite;
+  border-color: #7de0b8 !important;
 }
 
 /* ── Mobile ── */

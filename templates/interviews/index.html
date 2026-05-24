@@ -43,6 +43,29 @@
         required
       ></textarea>
 
+      <div class="level-row">
+        <label class="level-label">Сложность вопросов</label>
+        {% if user.is_subscribed or user.is_premium %}
+          <div class="level-select-wrap">
+            <select name="level" class="level-select">
+              <option value="">Без уровня</option>
+              <option value="junior">Junior</option>
+              <option value="middle">Middle</option>
+              <option value="pro">Pro</option>
+            </select>
+          </div>
+        {% else %}
+          <div class="level-blocked-wrap">
+            <div class="level-select-wrap">
+              <select disabled class="level-select level-select--disabled">
+                <option>Без уровня</option>
+              </select>
+            </div>
+            <span class="btn-tooltip">Доступно по подписке</span>
+          </div>
+        {% endif %}
+      </div>
+
       {% if not user.email_confirmed %}
         <div class="btn-blocked-wrap">
           <button type="button" class="btn">Начать интервью</button>

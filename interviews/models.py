@@ -9,11 +9,19 @@ class InterviewSession(models.Model):
         ('completed', 'Завершено'),
     ]
 
+    LEVEL_CHOICES = [
+        ('common', 'Без уровня'),
+        ('junior', 'Junior'),
+        ('middle', 'Middle'),
+        ('pro', 'Pro'),
+    ]
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sessions')
     vacancy_text = models.TextField()
     job_title = models.CharField(max_length=255, blank=True)
     company_name = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default='common')
     overall_score = models.FloatField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
