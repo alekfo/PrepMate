@@ -55,6 +55,23 @@
       btn.setAttribute('aria-expanded', false);
     });
   })();
+
+  function activateSpinner(phrases) {
+    document.getElementById('spinnerOverlay').classList.add('active');
+    if (!phrases || !phrases.length) return;
+    var el = document.getElementById('spinnerText');
+    phrases = phrases.slice().sort(function() { return Math.random() - 0.5; });
+    var i = 0;
+    el.textContent = phrases[0];
+    setInterval(function () {
+      el.classList.add('fade');
+      setTimeout(function () {
+        i = (i + 1) % phrases.length;
+        el.textContent = phrases[i];
+        el.classList.remove('fade');
+      }, 300);
+    }, 2800);
+  }
 </script>
 
 {% if messages %}
@@ -75,7 +92,7 @@
 
 <div class="spinner-overlay" id="spinnerOverlay">
   <div class="spinner"></div>
-  <p class="spinner-text">{% block spinner_text %}Анализируем ответ...{% endblock %}</p>
+  <p class="spinner-text" id="spinnerText"></p>
 </div>
 
 </body>
