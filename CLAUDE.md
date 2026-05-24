@@ -56,7 +56,8 @@ nginx/nginx.conf  — конфиг nginx: HTTPS, редирект www→apex, re
 
 ### interviews.InterviewSession
 Статусы: `pending` / `in_progress` / `completed`
-Хранит: текст вакансии, job_title, company_name, overall_score, created_at, completed_at
+Уровни: `common` (по умолчанию) / `junior` / `middle` / `pro`
+Хранит: текст вакансии, job_title, company_name, overall_score, level, created_at, completed_at
 Сортировка по умолчанию: `-created_at`
 
 ### interviews.Question
@@ -135,7 +136,8 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 
 Адрес прокси задаётся через `CLAUDE_API_SERVICE_URL` (по умолчанию `https://api.fieldlog.online/ask`).
 
-**`generate_questions(vacancy_text)`** — 1 запрос при старте сессии.
+**`generate_questions(vacancy_text, level='common')`** — 1 запрос при старте сессии.
+При `level` ≠ `'common'` добавляет в промпт инструкцию по уровню из `_LEVEL_INSTRUCTIONS`.
 Возвращает `{"job_title": ..., "company_name": ..., "questions": [{text, type}, ...]}`.
 
 **`evaluate_answer(question_text, answer_text, vacancy_context)`** — 1 запрос после каждого ответа.
@@ -216,6 +218,7 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 - `index` view передаёт `past_vacancies` — до 5 последних уникальных сессий (дедупликация по `vacancy_text`)
 - Dropdown «Из истории» подставляет текст вакансии в textarea через JS
 - Textarea: `rows=4`, авторастягивается (`autoGrow`), `resize: none`
+- Выбор уровня сложности (`junior` / `middle` / `pro`) — доступен только подписчикам (`is_subscribed` или `is_premium`); для остальных select задизейблен с hover-tooltip. Сервер валидирует подписку повторно в `start` view (игнорирует level если нет подписки).
 
 ## Страница настроек (`/users/settings/`)
 
@@ -239,8 +242,10 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 - Logout — только POST (Django 5+), в шаблоне обёрнут в `<form method="post">`
 - `resume` view — находит первый `Question` без `UserAnswer` через `filter(answer__isnull=True)`
 - `history` view — аннотирует queryset полями `total` и `answered` через `Count` + `Q`
-- Спиннер-оверлей определён в `base.html`, активируется JS через `.classList.add('active')`
+- Спиннер-оверлей определён в `base.html`, активируется через `activateSpinner(phrases)` — принимает массив фраз, перемешивает случайно, меняет текст каждые 2.8s с fade-анимацией
 - CSS адаптирован для мобильных через `@media (max-width: 600px)` в конце `main.css`
+- Карточки истории и блок score-card в отчёте окрашиваются по `overall_score`: `score--low` (< 2, красный), `score--mid` (2–7, жёлтый), `score--high` (> 7, зелёный) — переливающийся градиент через CSS `@keyframes score-shimmer`
+- В истории у каждой сессии под датой отображается уровень (`session.get_level_display`), если `level != 'common'`
 - `CSRF_TRUSTED_ORIGINS` — автоматически формируется из `ALLOWED_HOSTS` (исключая localhost)
 
 ## Запуск (dev)
