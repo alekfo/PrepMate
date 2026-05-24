@@ -23,4 +23,3 @@
 - [ ] Убрать неиспользуемый импорт `from xml.etree.ElementTree import indent` в `services.py`.
 - [ ] `interviews_used` в `start` view обновляется через `update()` без `F()` — потенциальный race condition при одновременных запросах одного пользователя.
 - [ ] `_get_client()` создаёт новый `anthropic.Anthropic` при каждом вызове — вынести в модульный синглтон или использовать dependency injection.
-- [ ] Покрыть `services.py` тестами с моками Claude API.
