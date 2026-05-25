@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+                                                                                                                                                                                                                                                                                                {% extends "base.html" %}
 
 {% block title %}Вопрос {{ order|add:1 }} из {{ total }} — PrepStats{% endblock %}
 
@@ -10,6 +10,7 @@
       <span class="progress-session">
         {% if session.job_title %}{{ session.job_title }}{% else %}Интервью{% endif %}
         {% if session.company_name %} · {{ session.company_name }}{% endif %}
+        {% if session.level != 'common' %}<span class="level-tag">{{ session.get_level_display }}</span>{% endif %}
       </span>
       <span class="progress-count">{{ order|add:1 }} / {{ total }}</span>
     </div>
@@ -30,20 +31,22 @@
     <p class="error-text">{{ error }}</p>
   {% endif %}
 
-  <form method="post" id="answerForm">
-    {% csrf_token %}
-    <label for="answer_text">Ваш ответ</label>
-    <textarea
-      id="answer_text"
-      name="answer_text"
-      rows="10"
-      placeholder="Развёрнуто опишите свой подход..."
-      required
-    ></textarea>
-    <button type="submit" class="btn" id="submitBtn">
-      {% if order|add:1 == total %}Завершить интервью{% else %}Следующий вопрос{% endif %}
-    </button>
-  </form>
+  <div class="form-card">
+    <form method="post" id="answerForm">
+      {% csrf_token %}
+      <label class="form-card-label" for="answer_text">Ваш ответ</label>
+      <textarea
+        id="answer_text"
+        name="answer_text"
+        rows="10"
+        placeholder="Развёрнуто опишите свой подход..."
+        required
+      ></textarea>
+      <button type="submit" class="btn" id="submitBtn">
+        {% if order|add:1 == total %}Завершить интервью{% else %}Следующий вопрос{% endif %}
+      </button>
+    </form>
+  </div>
 
 </div>
 
