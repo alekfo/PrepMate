@@ -64,6 +64,12 @@ nav a:not(.nav-brand):hover {
 }
 
 /* ── Nav menu ── */
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .nav-username {
   color: var(--text-secondary);
   font-size: 13.5px;
@@ -340,6 +346,21 @@ input:focus {
   color: var(--text-secondary);
   margin-bottom: 18px;
   text-transform: uppercase;
+}
+
+/* ── Level tag (inline in progress-session) ── */
+.level-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #f0efeb;
+  border: 1px solid #e4e3df;
+  color: var(--text-secondary);
+  margin-left: 6px;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
 }
 
 /* ── Question text ── */
@@ -929,38 +950,39 @@ footer a:hover {
 
 /* ── Settings ── */
 .settings-page h1 {
-  margin-bottom: 28px;
+  margin-bottom: 40px;
 }
 
 .settings-section {
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: 1px solid #e4e3df;
+  border-radius: 14px;
   background: var(--surface);
-  margin-bottom: 12px;
+  margin-bottom: 20px;
   overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
 }
 
 .settings-section-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 20px;
-  font-size: 11.5px;
+  padding: 14px 24px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  border-bottom: 1px solid #e4e3df;
+  background: #f8f7f5;
 }
 
 .settings-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  gap: 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 20px 24px;
+  gap: 24px;
+  border-bottom: 1px solid #e4e3df;
 }
 
 .settings-item:last-child {
@@ -974,7 +996,7 @@ footer a:hover {
 .settings-item-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 6px;
 }
 
 .settings-item-label {
@@ -988,13 +1010,14 @@ footer a:hover {
 }
 
 .settings-item-desc {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .settings-btn {
   margin-top: 0;
-  padding: 6px 14px;
+  padding: 7px 16px;
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -1128,6 +1151,148 @@ footer a:hover {
   border-color: #7de0b8 !important;
 }
 
+/* ── Index Hero ── */
+.page--index > h1 {
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -1.2px;
+  line-height: 1.15;
+  margin-bottom: 14px;
+}
+
+/* ── Form Card ── */
+.form-card {
+  background: #ffffff;
+  border: 1px solid #e4e3df;
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 16px 40px rgba(0,0,0,0.07);
+}
+
+.form-card-label {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.form-card textarea,
+.form-card input[type="text"],
+.form-card input[type="email"],
+.form-card input[type="password"] {
+  background: #f8f7f5;
+  border-color: #e4e3df;
+}
+
+.contact-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.contact-actions .btn {
+  width: auto;
+  margin-top: 0;
+}
+
+.form-card-history {
+  margin-top: 8px;
+}
+
+/* ── Level Pills ── */
+.level-pills {
+  display: flex;
+  align-items: center;
+  background: #f0efeb;
+  border: 1px solid #e4e3df;
+  border-radius: 10px;
+  padding: 4px;
+  gap: 3px;
+  margin-top: 18px;
+  position: relative;
+}
+
+.level-pill {
+  flex: 1;
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #9a9992;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+  letter-spacing: -0.1px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+}
+
+.level-pill:not(.level-pill--locked):hover {
+  color: var(--text);
+}
+
+.level-pill.active {
+  background: #ffffff;
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.level-pill--locked {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* Locked pill container — no subscription */
+.level-pills--locked {
+  cursor: default;
+}
+
+.level-pills--locked .level-pill--locked {
+  pointer-events: none;
+}
+
+.level-pills--locked .level-pill:not(.level-pill--locked) {
+  cursor: default;
+}
+
+.level-pills--locked .btn-tooltip {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.level-pills--locked:hover .btn-tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Form Card button */
+.form-card .btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: 22px;
+  padding: 13px 22px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.form-card .btn-blocked-wrap {
+  display: block;
+  width: 100%;
+  margin-top: 0;
+}
+
+.form-card .btn-blocked-wrap .btn {
+  opacity: 0.38;
+  margin-top: 22px;
+}
+
 /* ── Mobile ── */
 @media (max-width: 600px) {
 
@@ -1199,6 +1364,23 @@ footer a:hover {
   .vacancy-label-row {
     flex-wrap: wrap;
     gap: 8px;
+  }
+
+  /* Index hero */
+  .page--index > h1 {
+    font-size: 28px;
+    letter-spacing: -0.8px;
+  }
+
+  /* Form card */
+  .form-card {
+    padding: 20px;
+    border-radius: 12px;
+  }
+
+  .level-pill {
+    padding: 7px 6px;
+    font-size: 12px;
   }
 
   /* Tooltip — allow wrapping */
