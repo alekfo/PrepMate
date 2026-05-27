@@ -62,24 +62,21 @@
   </div>
 
   <div class="settings-section">
-    <div class="settings-section-title">
-      Подписка
-      <span class="nav-dropdown-badge">Скоро</span>
-    </div>
-    <div class="settings-item settings-item--disabled">
+    <div class="settings-section-title">Подписка</div>
+    <div class="settings-item">
       <div class="settings-item-info">
         <span class="settings-item-label">Текущий план</span>
         <span class="settings-item-desc">
           {% if user.is_premium %}
-            Премиум · 5 интервью в день
+            <span class="plan-badge plan-badge--premium">Премиум</span> · 5 интервью в день
           {% elif user.is_subscribed %}
-            Базовый · 3 интервью в день
+            <span class="plan-badge plan-badge--subscribed">Базовый</span> · 3 интервью в день
           {% else %}
-            Бесплатный · 1 интервью в день
+            <span class="plan-badge plan-badge--free">Бесплатный</span> · 1 интервью в день
           {% endif %}
         </span>
       </div>
-      <button class="btn btn-secondary settings-btn" disabled>Управлять</button>
+      <a href="{% url 'users:subscription' %}" class="btn btn-secondary settings-btn">Управлять →</a>
     </div>
   </div>
 

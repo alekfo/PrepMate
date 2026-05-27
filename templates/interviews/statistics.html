@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика и разбор от AI — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page">
+  <h1>Статистика и разбор от AI</h1>
+
+  {% if not vacancies %}
+    <p class="subtitle">Пройдите первое интервью, чтобы увидеть статистику.</p>
+    <a href="{% url 'interviews:index' %}" class="btn">Начать интервью</a>
+
+  {% else %}
+    <p class="subtitle">Прогресс по вакансиям.</p>
+    <div class="stat-list">
+      {% for v in vacancies %}
+        <a href="{% url 'interviews:statistics_vacancy' v.profile.id %}" class="stat-card">
+          <div class="stat-card-main">
+            <div class="stat-card-title">
+              {{ v.profile.job_title|default:"Без названия" }}{% if v.profile.company_name %}<span class="history-company"> · {{ v.profile.company_name }}</span>{% endif %}
+            </div>
+            <div class="stat-card-sub">
+              {{ v.session_count }}&nbsp;интервью{% if v.last_completed_at %} · последнее {{ v.last_completed_at|date:"d.m.Y" }}{% endif %}
+            </div>
+            {% if v.top_weakness_tags %}
+              <div class="stat-tags">
+                <span class="stat-tags-label">Слабые места:</span>
+                {% for t in v.top_weakness_tags %}<span class="tag-chip">{{ t.label }}</span>{% endfor %}
+              </div>
+            {% endif %}
+          </div>
+          <div class="stat-card-meta">
+            {% if v.avg_score %}
+              <div class="stat-score-wrap">
+                <span class="stat-score">{{ v.avg_score }}</span>
+                <span class="stat-score-label">средний балл</span>
+              </div>
+            {% endif %}
+            {% if v.trend != 'neutral' or v.session_count >= 4 %}
+              <span class="stat-trend trend-{{ v.trend }}">
+                {% if v.trend == 'up' %}↑ растёт{% elif v.trend == 'down' %}↓ падает{% else %}→ стабильно{% endif %}
+              </span>
+            {% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+{% if vacancies %}
+<script>
+  document.querySelectorAll('.stat-card').forEach(function (card) {
+    card.addEventListener('click', function () {
+      activateSpinner([
+        'Анализируем историю интервью...',
+        'Выявляем хронические слабые места...',
+        'Оцениваем динамику прогресса...',
+        'Сопоставляем данные по всем интервью...',
+        'Формулируем персональные рекомендации...',
+        'Ищем паттерны в ваших ответах...',
+        'Готовим AI-анализ прогресса...',
+      ]);
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

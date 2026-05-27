@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}{{ vacancy.job_title|default:"Статистика" }} — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  <a href="{% url 'interviews:statistics' %}" class="back-link">← Статистика и разбор от AI</a>
+
+  <div class="stat-vacancy-header">
+    <h1>{{ vacancy.job_title|default:"Без названия" }}</h1>
+    {% if vacancy.company_name %}<p class="subtitle" style="margin-bottom: 6px;">{{ vacancy.company_name }}</p>{% endif %}
+    <p class="stat-session-count">{{ session_count }}&nbsp;интервью</p>
+  </div>
+
+  {% if not session_count %}
+    <p style="color: var(--text-secondary);">Нет завершённых интервью по этой вакансии.</p>
+
+  {% else %}
+
+    {% if chart_labels %}
+      <div class="chart-wrap">
+        <svg viewBox="0 0 600 145" xmlns="http://www.w3.org/2000/svg" class="score-chart">
+          <!-- vertical axis -->
+          <line x1="52" y1="8" x2="52" y2="132" stroke="#e8e8e6" stroke-width="1"/>
+
+          <line x1="52" y1="8"   x2="588" y2="8"   stroke="#e8e8e6" stroke-width="1"/>
+          <text x="47" y="12"  text-anchor="end" font-size="10" fill="#77776e">10</text>
+
+          <line x1="52" y1="49"  x2="588" y2="49"  stroke="#e8e8e6" stroke-width="1"/>
+          <text x="47" y="53"  text-anchor="end" font-size="10" fill="#77776e">7</text>
+
+          <line x1="52" y1="91"  x2="588" y2="91"  stroke="#e8e8e6" stroke-width="1"/>
+          <text x="47" y="95"  text-anchor="end" font-size="10" fill="#77776e">4</text>
+
+          <line x1="52" y1="132" x2="588" y2="132" stroke="#e8e8e6" stroke-width="1"/>
+          <text x="47" y="136" text-anchor="end" font-size="10" fill="#77776e">1</text>
+
+          {% if chart_points %}
+          <polyline
+            points="{{ chart_points }}"
+            fill="none"
+            stroke="#111110"
+            stroke-width="2"
+            stroke-linejoin="round"
+            stroke-linecap="round"
+          />
+          {% endif %}
+
+          {% for pt in chart_labels %}
+            <circle cx="{{ pt.x }}" cy="{{ pt.y }}" r="6" fill="#111110" stroke="#ffffff" stroke-width="2.5"/>
+          {% endfor %}
+        </svg>
+        <p class="chart-legend">по горизонтали — дата интервью &nbsp;·&nbsp; по вертикали — общий балл (1–10)</p>
+      </div>
+    {% endif %}
+
+    {% if vacancy_advice %}
+      <div class="advice-card">
+        <div class="advice-card-header">
+          AI-анализ прогресса
+          {% if vacancy_advice.generated_at %}
+            <span class="advice-updated">обновлено {{ vacancy_advice.generated_at|date:"d.m.Y" }}</span>
+          {% endif %}
+        </div>
+
+        {% if vacancy_advice.overall_progress %}
+          <p class="advice-overall">{{ vacancy_advice.overall_progress }}</p>
+        {% endif %}
+
+        {% if vacancy_advice.chronic_issues %}
+          <div class="advice-section">
+            <div class="advice-section-title">Хронические проблемы</div>
+            <ul class="advice-list advice-list--issues">
+              {% for item in vacancy_advice.chronic_issues %}<li>{{ item }}</li>{% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if vacancy_advice.improvements %}
+          <div class="advice-section">
+            <div class="advice-section-title">Что улучшилось</div>
+            <ul class="advice-list advice-list--good">
+              {% for item in vacancy_advice.improvements %}<li>{{ item }}</li>{% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if vacancy_advice.next_steps %}
+          <div class="advice-section">
+            <div class="advice-section-title">Следующие шаги</div>
+            <ul class="advice-list">
+              {% for step in vacancy_advice.next_steps %}<li>{{ step }}</li>{% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if vacancy_advice.focus_topics %}
+          <div class="advice-section {% if not vacancy_advice.verdict %}advice-section--last{% endif %}">
+            <div class="advice-section-title">Темы для изучения</div>
+            <div class="topic-pills">
+              {% for topic in vacancy_advice.focus_topics %}<span class="topic-pill">{{ topic }}</span>{% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        {% if vacancy_advice.verdict %}
+          <div class="advice-section advice-section--last advice-verdict">
+            <div class="advice-section-title">Вердикт</div>
+            <p class="advice-verdict-text">{{ vacancy_advice.verdict }}</p>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if tag_stats %}
+      <div class="stat-section">
+        <h2>Динамика навыков</h2>
+        <div class="tag-stat-list">
+          {% for t in tag_stats %}
+            <div class="tag-stat-row">
+              <div class="tag-stat-left">
+                <span class="tag-stat-label">{{ t.label }}</span>
+                <span class="tag-stat-count">{{ t.count }} из {{ t.total }} интервью</span>
+              </div>
+              {% if t.status == 'chronic' %}
+                <span class="tag-status tag-status--chronic">хроническое</span>
+              {% elif t.status == 'fixed' %}
+                <span class="tag-status tag-status--fixed">исправлено</span>
+              {% else %}
+                <span class="tag-status tag-status--active">требует внимания</span>
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="stat-section">
+      <h2>Все интервью</h2>
+      <div class="history-list">
+        {% for item in sessions %}
+          {% with s=item.session %}
+            <a href="{% url 'interviews:report' session_id=s.id %}"
+               class="history-item {% if s.overall_score %}{% if s.overall_score < 2 %}score--low{% elif s.overall_score <= 7 %}score--mid{% else %}score--high{% endif %}{% endif %}">
+              <div class="history-main">
+                <span class="history-title">Интервью {{ item.number }}</span>
+                <span class="history-date">
+                  {{ s.completed_at|date:"d.m.Y" }}{% if s.level != 'common' %} · {{ s.get_level_display }}{% endif %}
+                </span>
+              </div>
+              <div class="history-meta">
+                <span class="badge" style="margin-bottom: 0;">Завершено</span>
+                {% if s.overall_score %}
+                  <span class="history-score">{{ s.overall_score|floatformat:1 }} / 10</span>
+                {% endif %}
+              </div>
+            </a>
+          {% endwith %}
+        {% endfor %}
+      </div>
+    </div>
+
+  {% endif %}
+</div>
+{% endblock %}

@@ -114,6 +114,18 @@ def confirm_email(request):
     return redirect('users:settings')
 
 
+@login_required
+def subscription(request):
+    u = request.user
+    if u.is_premium:
+        current_plan = 'premium'
+    elif u.is_subscribed:
+        current_plan = 'subscribed'
+    else:
+        current_plan = 'free'
+    return render(request, 'users/subscription.html', {'current_plan': current_plan})
+
+
 def privacy_policy(request):
     return render(request, 'users/privacy_policy.html')
 

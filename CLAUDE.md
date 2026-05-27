@@ -54,10 +54,22 @@ nginx/nginx.conf  — конфиг nginx: HTTPS, редирект www→apex, re
 | `is_premium` | BooleanField | False | Расширенная подписка |
 | `email_confirmed` | BooleanField | False | Подтверждён ли email |
 
+### interviews.VacancyProfile
+Группирует сессии одного пользователя по одному тексту вакансии.
+| Поле | Тип | Назначение |
+|---|---|---|
+| `user` | FK → User | Владелец |
+| `vacancy_text` | TextField | Полный текст вакансии (ключ дедупликации) |
+| `job_title` | CharField | Название должности (обновляется из последней сессии) |
+| `company_name` | CharField | Название компании |
+| `created_at` | DateTimeField | auto_now_add |
+
+Создаётся в `start` view через `get_or_create(user, vacancy_text)`. Каждая `InterviewSession` имеет FK `vacancy_profile` (nullable для старых сессий до миграции 0004).
+
 ### interviews.InterviewSession
 Статусы: `pending` / `in_progress` / `completed`
 Уровни: `common` (по умолчанию) / `junior` / `middle` / `pro`
-Хранит: текст вакансии, job_title, company_name, overall_score, level, created_at, completed_at
+Хранит: текст вакансии, job_title, company_name, overall_score, level, created_at, completed_at, `vacancy_profile` (FK)
 Сортировка по умолчанию: `-created_at`
 
 ### interviews.Question
@@ -68,7 +80,33 @@ nginx/nginx.conf  — конфиг nginx: HTTPS, редирект www→apex, re
 OneToOne → Question. Хранит текст ответа.
 
 ### interviews.Feedback
-OneToOne → UserAnswer. Хранит: score (1–10), strengths (JSON), improvements (JSON), ideal_answer_hint.
+OneToOne → UserAnswer. Хранит: score (1–10), strengths (JSON), improvements (JSON), ideal_answer_hint, `weakness_tags` (JSON, default=[]), `strength_tags` (JSON, default=[]).
+
+Теги выбираются из фиксированного белого списка `_VALID_TAGS` в `services.py` (depth, examples, structure, communication, confidence, relevance, experience, proactivity). Теги не из списка отбрасываются после парсинга.
+
+### interviews.SessionAdvice
+OneToOne → InterviewSession. Генерируется лениво при первом визите подписчика на страницу статистики вакансии.
+| Поле | Тип |
+|---|---|
+| `summary` | TextField |
+| `advice` | JSONField (list) |
+| `focus_topics` | JSONField (list) |
+| `generated_at` | DateTimeField (auto_now_add) |
+
+### interviews.VacancyAdvice
+OneToOne → VacancyProfile. Агрегированный AI-анализ прогресса по всем сессиям вакансии.
+| Поле | Тип |
+|---|---|
+| `overall_progress` | TextField |
+| `chronic_issues` | JSONField (list) |
+| `improvements` | JSONField (list) |
+| `next_steps` | JSONField (list) |
+| `focus_topics` | JSONField (list) |
+| `verdict` | TextField |
+| `generated_at` | DateTimeField (auto_now_add) |
+| `session_count_at_generation` | PositiveIntegerField |
+
+Инвалидация кэша: при каждом визите сравнивается `session_count_at_generation` с текущим числом завершённых сессий. Если не совпадает — регенерируется.
 
 ## URL-маршруты
 
@@ -79,11 +117,14 @@ OneToOne → UserAnswer. Хранит: score (1–10), strengths (JSON), improve
 /session/<id>/resume/                       → resume (редирект на первый неотвеченный вопрос)
 /session/<id>/question/<order>/             → question (GET показ / POST сохранение ответа)
 /session/<id>/report/                       → report (итоговый отчёт)
+/statistics/                                → statistics_overview (список вакансий, только подписчики)
+/statistics/vacancy/<id>/                   → statistics_vacancy (детальная страница вакансии)
 
 /users/login/                               → login
 /users/logout/                              → logout (только POST)
 /users/register/                            → register
 /users/settings/                            → settings (требует login)
+/users/subscription/                        → subscription (страница тарифов, paywall)
 /users/about/                               → о проекте (публичная)
 /users/privacy-policy/                      → политика конфиденциальности
 /users/public-offer/                        → договор публичной оферты
@@ -132,18 +173,22 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 
 ## Claude API — логика вызовов
 
-В `interviews/services.py` два публичных метода. Claude вызывается **не напрямую через Anthropic SDK**, а через HTTP-прокси: `requests.post(settings.CLAUDE_API_SERVICE_URL, json={"prompt": ...}, timeout=60)`. Прокси возвращает `{"response": "..."}`.
+В `interviews/services.py` четыре публичных метода. Claude вызывается **не напрямую через Anthropic SDK**, а через HTTP-прокси: `requests.post(settings.CLAUDE_API_SERVICE_URL, json={"prompt": ...}, headers={"X-API-Key": settings.CLAUDE_API_SERVICE_KEY}, timeout=60)`. Прокси возвращает `{"response": "..."}`.
 
-Адрес прокси задаётся через `CLAUDE_API_SERVICE_URL` (по умолчанию `https://api.fieldlog.online/ask`).
+Адрес прокси задаётся через `CLAUDE_API_SERVICE_URL`, ключ авторизации — через `CLAUDE_API_SERVICE_KEY` (env `SERVICE_API_KEY`).
 
 **`generate_questions(vacancy_text, level='common')`** — 1 запрос при старте сессии.
 При `level` ≠ `'common'` добавляет в промпт инструкцию по уровню из `_LEVEL_INSTRUCTIONS`.
 Возвращает `{"job_title": ..., "company_name": ..., "questions": [{text, type}, ...]}`.
 
 **`evaluate_answer(question_text, answer_text, vacancy_context)`** — 1 запрос после каждого ответа.
-Возвращает `{"score": 1-10, "strengths": [...], "improvements": [...], "ideal_answer_hint": ...}`.
+Возвращает `{"score": 1-10, "strengths": [...], "improvements": [...], "ideal_answer_hint": ..., "weakness_tags": [...], "strength_tags": [...]}`.
 
-Итого **9 запросов** на одну полную сессию (1 + 8). Ответ парсится через `_parse_json()`, которая снимает markdown-обёртку ` ```json ``` `.
+**`generate_session_advice(session)`** — 1 запрос при первом визите подписчика на статистику вакансии (для каждой сессии без `SessionAdvice`). Передаёт в промпт все вопросы, оценки и замечания сессии. Возвращает `{"summary": ..., "advice": [...], "focus_topics": [...]}`.
+
+**`generate_vacancy_advice(vacancy_profile)`** — 1 запрос при генерации/обновлении `VacancyAdvice`. Передаёт развёрнутую историю всех сессий: тексты вопросов с оценками и главным замечанием фидбека по каждому вопросу, хронические и исправленные теги. Возвращает `{"overall_progress": ..., "chronic_issues": [...], "improvements": [...], "next_steps": [...], "focus_topics": [...], "verdict": ...}`.
+
+Итого **9 запросов** на одну полную сессию (1 + 8). Запросы статистики — дополнительно, только для подписчиков. Ответ парсится через `_parse_json()`, которая снимает markdown-обёртку ` ```json ``` `.
 
 ## Переменные окружения (.env)
 
@@ -152,6 +197,7 @@ SECRET_KEY=...
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 CLAUDE_API_SERVICE_URL=https://api.fieldlog.online/ask   # прокси к Claude
+SERVICE_API_KEY=...                                      # X-API-Key для прокси
 
 EMAIL_HOST=smtp.yandex.ru
 EMAIL_PORT=465
@@ -181,8 +227,9 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 **entrypoint.sh** при старте контейнера:
 1. Ждёт готовности PostgreSQL (polling через psycopg2)
 2. `python manage.py migrate --noinput`
-3. `python manage.py collectstatic --noinput`
-4. Запускает gunicorn: `gevent` воркеры, 2 workers, 20 connections, timeout 120s
+3. `python manage.py backfill_vacancy_profiles` — привязывает старые сессии к `VacancyProfile` (идемпотентно, безопасно при каждом деплое)
+4. `python manage.py collectstatic --noinput`
+5. Запускает gunicorn: `gevent` воркеры, 2 workers, 20 connections, timeout 120s
 
 **nginx** (`nginx/nginx.conf`):
 - `default_server` на 80 и 443 → `return 444` (блокирует сканеры с чужим Host)
@@ -207,7 +254,7 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 
 **Незалогиненный пользователь** (навбар): бренд → О проекте · Войти · Регистрация
 **Залогиненный пользователь** (навбар): бренд → username · Выйти · бургер-меню `≡`
-Бургер-меню dropdown: История · Статистика (disabled) · Настройки · О проекте
+Бургер-меню dropdown: История · Статистика · Настройки · О проекте
 
 При добавлении нового раздела — добавить `<a>` или `<span>` в `#navDropdown` в `base.html`.
 
@@ -219,6 +266,41 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 - Dropdown «Из истории» подставляет текст вакансии в textarea через JS
 - Textarea: `rows=4`, авторастягивается (`autoGrow`), `resize: none`
 - Выбор уровня сложности (`junior` / `middle` / `pro`) — доступен только подписчикам (`is_subscribed` или `is_premium`); для остальных select задизейблен с hover-tooltip. Сервер валидирует подписку повторно в `start` view (игнорирует level если нет подписки).
+
+## Раздел Статистика
+
+Доступен только подписчикам (`is_subscribed` или `is_premium`). Не-подписчик редиректится на `/users/subscription/`.
+
+### Обзор вакансий (`/statistics/`)
+
+View `statistics_overview`. Итерирует все `VacancyProfile` пользователя с завершёнными сессиями. По каждой вакансии вычисляет в Python:
+- средний балл, тренд (`_compute_trend`: avg последних 3 vs avg предыдущих 3, порог ±0.5), топ-2 тега слабых мест
+- Если у пользователя нет вакансий с завершёнными сессиями — заглушка с предложением пройти интервью
+
+На карточке вакансии — клик запускает `activateSpinner(phrases)` (ожидание генерации советов).
+
+### Детальная страница вакансии (`/statistics/vacancy/<id>/`)
+
+View `statistics_vacancy`. Доступ: `vacancy_profile.user == request.user`.
+
+**Ленивая генерация советов** (при каждом визите):
+1. Для каждой завершённой сессии без `SessionAdvice` — вызывается `generate_session_advice()`, создаётся запись
+2. Если `VacancyAdvice` отсутствует или `session_count_at_generation < текущее_кол-во_сессий` — вызывается `generate_vacancy_advice()`, создаётся/обновляется запись
+
+**SVG-график** `overall_score` по сессиям (без JS-библиотек):
+- Координаты вычисляются в Python (`_build_chart_points`, `_build_chart_labels`): `pad_left=52, plot_w=536, pad_top=8, plot_h=124`, `viewBox="0 0 600 145"`
+- Координаты передаются как **целые числа** (не float!) — Django рендерит float через русскую локаль с запятой (`320,0`), что ломает SVG. Округление через `round()` → int решает проблему.
+- Ось Y: метки 10/7/4/1 + вертикальная линия оси на x=52
+
+**Динамика навыков** (`_build_tag_stats`): для каждого тега считается в скольких сессиях встречался. Статусы: `chronic` (≥50% сессий), `fixed` (был раньше, отсутствует в последних 3), `active` (остальные).
+
+**VacancyAdvice** отображает: общий прогресс, хронические проблемы, улучшения, следующие шаги, темы для изучения (как pill-бейджи), вердикт.
+
+### Страница подписки (`/users/subscription/`)
+
+View `subscription` в `users/views.py`. Показывает три тарифа (Бесплатный / Базовый 299₽ / Премиум 599₽) с текущим статусом пользователя. Кнопки оплаты заглушены (tooltip «Оплата появится скоро»).
+
+Текущий план определяется: `is_premium` → `'premium'`, `is_subscribed` → `'subscribed'`, иначе `'free'`.
 
 ## Страница настроек (`/users/settings/`)
 

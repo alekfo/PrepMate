@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Подписка — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  <a href="{% url 'users:settings' %}" class="back-link">← Настройки</a>
+
+  <h1>Подписка</h1>
+  <p class="subtitle">Выберите план, который подходит вам.</p>
+
+  <div class="plans-grid">
+
+    <!-- Бесплатный -->
+    <div class="plan-card {% if current_plan == 'free' %}plan-card--current{% endif %}">
+      {% if current_plan == 'free' %}<span class="plan-current-badge">Текущий план</span>{% endif %}
+      <div class="plan-name">Бесплатный</div>
+      <div class="plan-price">0 ₽</div>
+      <ul class="plan-features">
+        <li class="feature--yes">1 интервью в день</li>
+        <li class="feature--yes">Оценка ответов с фидбеком</li>
+        <li class="feature--yes">История сессий</li>
+        <li class="feature--no">Статистика и разбор от AI</li>
+        <li class="feature--no">AI-анализ прогресса</li>
+        <li class="feature--no">Выбор уровня сложности</li>
+      </ul>
+      {% if current_plan == 'free' %}
+        <span class="btn btn-secondary" style="width:100%; justify-content:center; cursor:default; opacity:0.45; pointer-events:none;">Активен</span>
+      {% else %}
+        <span class="btn btn-secondary" style="width:100%; justify-content:center; cursor:default; opacity:0.45; pointer-events:none;">Недоступно</span>
+      {% endif %}
+    </div>
+
+    <!-- Базовый -->
+    <div class="plan-card {% if current_plan == 'subscribed' %}plan-card--current{% endif %}">
+      {% if current_plan == 'subscribed' %}<span class="plan-current-badge">Текущий план</span>{% endif %}
+      <div class="plan-name">Базовый</div>
+      <div class="plan-price">
+        <span class="plan-price-amount">299 ₽</span>
+        <span class="plan-price-period">/ месяц</span>
+      </div>
+      <ul class="plan-features">
+        <li class="feature--yes">3 интервью в день</li>
+        <li class="feature--yes">Оценка ответов с фидбеком</li>
+        <li class="feature--yes">История сессий</li>
+        <li class="feature--yes">Статистика и разбор от AI</li>
+        <li class="feature--yes">AI-анализ прогресса</li>
+        <li class="feature--yes">Выбор уровня сложности</li>
+      </ul>
+      {% if current_plan == 'subscribed' %}
+        <span class="btn btn-secondary" style="width:100%; justify-content:center; cursor:default; opacity:0.45; pointer-events:none;">Активен</span>
+      {% else %}
+        <div class="btn-blocked-wrap" style="width:100%; margin-top:0;">
+          <span class="btn" style="width:100%; justify-content:center; pointer-events:none;">Купить</span>
+          <span class="btn-tooltip">Оплата появится скоро</span>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Премиум -->
+    <div class="plan-card plan-card--premium {% if current_plan == 'premium' %}plan-card--current{% endif %}">
+      {% if current_plan == 'premium' %}<span class="plan-current-badge">Текущий план</span>{% endif %}
+      <div class="plan-name">Премиум</div>
+      <div class="plan-price">
+        <span class="plan-price-amount">599 ₽</span>
+        <span class="plan-price-period">/ месяц</span>
+      </div>
+      <ul class="plan-features">
+        <li class="feature--yes">5 интервью в день</li>
+        <li class="feature--yes">Оценка ответов с фидбеком</li>
+        <li class="feature--yes">История сессий</li>
+        <li class="feature--yes">Статистика и разбор от AI</li>
+        <li class="feature--yes">AI-анализ прогресса</li>
+        <li class="feature--yes">Выбор уровня сложности</li>
+        <li class="feature--yes">Приоритетная поддержка</li>
+      </ul>
+      {% if current_plan == 'premium' %}
+        <span class="btn btn-secondary" style="width:100%; justify-content:center; cursor:default; opacity:0.45; pointer-events:none;">Активен</span>
+      {% else %}
+        <div class="btn-blocked-wrap" style="width:100%; margin-top:0;">
+          <span class="btn" style="width:100%; justify-content:center; pointer-events:none;">Купить</span>
+          <span class="btn-tooltip">Оплата появится скоро</span>
+        </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}

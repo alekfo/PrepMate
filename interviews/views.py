@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -6,8 +7,8 @@ from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Count, Q
 
-from .models import InterviewSession, Question, UserAnswer, Feedback
-from .services import generate_questions, evaluate_answer
+from .models import InterviewSession, Question, UserAnswer, Feedback, VacancyProfile, SessionAdvice, VacancyAdvice
+from .services import generate_questions, evaluate_answer, generate_session_advice, generate_vacancy_advice
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +71,25 @@ def start(request):
         messages.error(request, 'Не удалось сгенерировать вопросы. Попробуйте ещё раз.')
         return redirect('interviews:index')
 
-    session = InterviewSession.objects.create(
+    job_title = data.get('job_title', '')
+    company_name = data.get('company_name', '')
+
+    vacancy_profile, created = VacancyProfile.objects.get_or_create(
         user=request.user,
         vacancy_text=vacancy_text,
-        job_title=data.get('job_title', ''),
-        company_name=data.get('company_name', ''),
+        defaults={'job_title': job_title, 'company_name': company_name},
+    )
+    if not created and (job_title or company_name):
+        vacancy_profile.job_title = job_title
+        vacancy_profile.company_name = company_name
+        vacancy_profile.save(update_fields=['job_title', 'company_name'])
+
+    session = InterviewSession.objects.create(
+        user=request.user,
+        vacancy_profile=vacancy_profile,
+        vacancy_text=vacancy_text,
+        job_title=job_title,
+        company_name=company_name,
         status='in_progress',
         level=level,
     )
@@ -140,6 +155,8 @@ def question(request, session_id, order):
                 strengths=feedback_data['strengths'],
                 improvements=feedback_data['improvements'],
                 ideal_answer_hint=feedback_data['ideal_answer_hint'],
+                weakness_tags=feedback_data.get('weakness_tags', []),
+                strength_tags=feedback_data.get('strength_tags', []),
             )
         except Exception as e:
             logger.error("evaluate_answer failed: session=%d question=%d user=%s: %s", session_id, order, request.user.username, e)
@@ -194,3 +211,224 @@ def report(request, session_id):
         'session': session,
         'questions': questions,
     })
+
+
+_TAG_LABELS = {
+    'depth': 'Глубина',
+    'examples': 'Примеры',
+    'structure': 'Структура',
+    'communication': 'Коммуникация',
+    'confidence': 'Уверенность',
+    'relevance': 'Релевантность',
+    'experience': 'Опыт',
+    'proactivity': 'Проактивность',
+}
+
+
+@login_required
+def statistics_overview(request):
+    has_subscription = request.user.is_subscribed or request.user.is_premium
+    if not has_subscription:
+        return redirect('users:subscription')
+
+    vacancies = []
+
+    if True:
+        for vp in VacancyProfile.objects.filter(user=request.user).order_by('-created_at'):
+            completed = list(
+                vp.sessions.filter(status='completed')
+                .order_by('completed_at')
+                .prefetch_related('questions__answer__feedback')
+            )
+            if not completed:
+                continue
+
+            scores = [s.overall_score for s in completed if s.overall_score is not None]
+            avg_score = round(sum(scores) / len(scores), 1) if scores else None
+            best_score = round(max(scores), 1) if scores else None
+
+            all_tags = []
+            for s in completed:
+                for q in s.questions.all():
+                    fb = getattr(getattr(q, 'answer', None), 'feedback', None)
+                    if fb:
+                        all_tags.extend(fb.weakness_tags)
+            top_tags = [
+                {'tag': t, 'label': _TAG_LABELS.get(t, t)}
+                for t, _ in Counter(all_tags).most_common(2)
+            ]
+
+            vacancies.append({
+                'profile': vp,
+                'session_count': len(completed),
+                'avg_score': avg_score,
+                'best_score': best_score,
+                'trend': _compute_trend(scores),
+                'top_weakness_tags': top_tags,
+                'last_completed_at': completed[-1].completed_at,
+            })
+
+    return render(request, 'interviews/statistics.html', {'vacancies': vacancies})
+
+
+@login_required
+def statistics_vacancy(request, vacancy_id):
+    has_subscription = request.user.is_subscribed or request.user.is_premium
+    if not has_subscription:
+        return redirect('users:subscription')
+
+    vacancy_profile = get_object_or_404(VacancyProfile, id=vacancy_id, user=request.user)
+    completed_sessions = list(
+        vacancy_profile.sessions
+        .filter(status='completed')
+        .order_by('completed_at')
+        .prefetch_related('questions__answer__feedback')
+    )
+
+    vacancy_advice = None
+
+    if completed_sessions:
+        existing_advice = set(
+            SessionAdvice.objects.filter(session__in=completed_sessions)
+            .values_list('session_id', flat=True)
+        )
+        for session in completed_sessions:
+            if session.id not in existing_advice:
+                try:
+                    data = generate_session_advice(session)
+                    SessionAdvice.objects.create(
+                        session=session,
+                        summary=data.get('summary', ''),
+                        advice=data.get('advice', []),
+                        focus_topics=data.get('focus_topics', []),
+                    )
+                except Exception as e:
+                    logger.error("generate_session_advice failed: session=%d: %s", session.id, e)
+
+        current_count = len(completed_sessions)
+        try:
+            vacancy_advice = vacancy_profile.advice
+        except VacancyAdvice.DoesNotExist:
+            vacancy_advice = None
+
+        if vacancy_advice is None or vacancy_advice.session_count_at_generation < current_count:
+            try:
+                data = generate_vacancy_advice(vacancy_profile)
+                fields = {
+                    'overall_progress': data.get('overall_progress', ''),
+                    'chronic_issues': data.get('chronic_issues', []),
+                    'improvements': data.get('improvements', []),
+                    'next_steps': data.get('next_steps', []),
+                    'focus_topics': data.get('focus_topics', []),
+                    'verdict': data.get('verdict', ''),
+                    'session_count_at_generation': current_count,
+                }
+                if vacancy_advice is None:
+                    vacancy_advice = VacancyAdvice.objects.create(
+                        vacancy_profile=vacancy_profile, **fields
+                    )
+                else:
+                    for k, v in fields.items():
+                        setattr(vacancy_advice, k, v)
+                    vacancy_advice.save()
+            except Exception as e:
+                logger.error("generate_vacancy_advice failed: vacancy_profile=%d: %s", vacancy_profile.id, e)
+
+    sessions_display = [
+        {'session': s, 'number': len(completed_sessions) - i}
+        for i, s in enumerate(reversed(completed_sessions))
+    ]
+
+    return render(request, 'interviews/statistics_vacancy.html', {
+        'vacancy': vacancy_profile,
+        'sessions': sessions_display,
+        'session_count': len(completed_sessions),
+        'chart_points': _build_chart_points(completed_sessions),
+        'chart_labels': _build_chart_labels(completed_sessions),
+        'tag_stats': _build_tag_stats(completed_sessions),
+        'vacancy_advice': vacancy_advice,
+    })
+
+
+def _compute_trend(scores: list) -> str:
+    if len(scores) < 4:
+        return 'neutral'
+    recent = sum(scores[-3:]) / 3
+    prev_slice = scores[:-3]
+    prev_avg = sum(prev_slice[-3:]) / len(prev_slice[-3:])
+    diff = recent - prev_avg
+    if diff > 0.5:
+        return 'up'
+    if diff < -0.5:
+        return 'down'
+    return 'neutral'
+
+
+def _build_chart_points(sessions: list) -> str:
+    if not sessions:
+        return ''
+    pad_left, plot_w = 52, 536   # viewBox 600, right pad 12
+    pad_top, plot_h = 8, 124     # viewBox 172, bottom pad 40
+    n = len(sessions)
+    pts = []
+    for i, s in enumerate(sessions):
+        score = s.overall_score or 0
+        x = round(pad_left + (i * plot_w / (n - 1)) if n > 1 else pad_left + plot_w / 2)
+        y = round(pad_top + (10 - score) / 9 * plot_h)
+        pts.append(f'{x},{y}')
+    return ' '.join(pts)
+
+
+def _build_chart_labels(sessions: list) -> list:
+    if not sessions:
+        return []
+    pad_left, plot_w = 52, 536
+    pad_top, plot_h = 8, 124
+    n = len(sessions)
+    labels = []
+    for i, s in enumerate(sessions):
+        score = s.overall_score or 0
+        x = round(pad_left + (i * plot_w / (n - 1)) if n > 1 else pad_left + plot_w / 2, 1)
+        y = round(pad_top + (10 - score) / 9 * plot_h, 1)
+        labels.append({
+            'x': round(x),
+            'y': round(y),
+            'score': score,
+            'date': s.completed_at.strftime('%d.%m') if s.completed_at else '',
+        })
+    return labels
+
+
+def _build_tag_stats(sessions: list) -> list:
+    if not sessions:
+        return []
+    total = len(sessions)
+    session_tag_sets = []
+    for s in sessions:
+        tags = set()
+        for q in s.questions.all():
+            fb = getattr(getattr(q, 'answer', None), 'feedback', None)
+            if fb:
+                tags.update(fb.weakness_tags)
+        session_tag_sets.append(tags)
+
+    all_tags = set().union(*session_tag_sets)
+    tag_counts = {t: sum(1 for ts in session_tag_sets if t in ts) for t in all_tags}
+    last_3 = set().union(*session_tag_sets[-3:]) if session_tag_sets else set()
+
+    result = []
+    for tag, count in sorted(tag_counts.items(), key=lambda x: -x[1]):
+        if count / total >= 0.5:
+            status = 'chronic'
+        elif total > 3 and tag not in last_3:
+            status = 'fixed'
+        else:
+            status = 'active'
+        result.append({
+            'tag': tag,
+            'label': _TAG_LABELS.get(tag, tag),
+            'count': count,
+            'total': total,
+            'status': status,
+        })
+    return result
