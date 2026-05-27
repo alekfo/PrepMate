@@ -2,6 +2,21 @@ from django.db import models
 from django.conf import settings
 
 
+class VacancyProfile(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='vacancy_profiles')
+    vacancy_text = models.TextField()
+    job_title = models.CharField(max_length=255, blank=True)
+    company_name = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Профиль вакансии'
+        verbose_name_plural = 'Профили вакансий'
+
+    def __str__(self):
+        return f'{self.user.username} — {self.job_title or "Без названия"}'
+
+
 class InterviewSession(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Ожидает'),
@@ -17,6 +32,7 @@ class InterviewSession(models.Model):
     ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sessions')
+    vacancy_profile = models.ForeignKey(VacancyProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='sessions')
     vacancy_text = models.TextField()
     job_title = models.CharField(max_length=255, blank=True)
     company_name = models.CharField(max_length=255, blank=True)
@@ -69,6 +85,42 @@ class Feedback(models.Model):
     strengths = models.JSONField(default=list)
     improvements = models.JSONField(default=list)
     ideal_answer_hint = models.TextField()
+    weakness_tags = models.JSONField(default=list)
+    strength_tags = models.JSONField(default=list)
 
     def __str__(self):
         return f'Feedback [{self.score}/10] для {self.answer}'
+
+
+class SessionAdvice(models.Model):
+    session = models.OneToOneField(InterviewSession, on_delete=models.CASCADE, related_name='advice')
+    summary = models.TextField()
+    advice = models.JSONField(default=list)
+    focus_topics = models.JSONField(default=list)
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Совет по сессии'
+        verbose_name_plural = 'Советы по сессиям'
+
+    def __str__(self):
+        return f'SessionAdvice для {self.session}'
+
+
+class VacancyAdvice(models.Model):
+    vacancy_profile = models.OneToOneField(VacancyProfile, on_delete=models.CASCADE, related_name='advice')
+    overall_progress = models.TextField()
+    chronic_issues = models.JSONField(default=list)
+    improvements = models.JSONField(default=list)
+    next_steps = models.JSONField(default=list)
+    focus_topics = models.JSONField(default=list)
+    verdict = models.TextField(blank=True)
+    generated_at = models.DateTimeField(auto_now_add=True)
+    session_count_at_generation = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Совет по вакансии'
+        verbose_name_plural = 'Советы по вакансиям'
+
+    def __str__(self):
+        return f'VacancyAdvice для {self.vacancy_profile}'
