@@ -17,6 +17,7 @@
 <nav>
   <a href="{% url 'interviews:index' %}" class="nav-brand">PrepStats</a>
   {% if user.is_authenticated %}
+    <div class="nav-right">
     <span class="nav-username">{{ user.username }}</span>
     <form method="post" action="{% url 'users:logout' %}" style="display:inline;">
       {% csrf_token %}
@@ -28,10 +29,11 @@
       </button>
       <div class="nav-dropdown" id="navDropdown">
         <a href="{% url 'interviews:history' %}" class="nav-dropdown-item">История</a>
-        <span class="nav-dropdown-item nav-dropdown-item--disabled">Статистика <span class="nav-dropdown-badge">Скоро</span></span>
+        <a href="{% url 'interviews:statistics' %}" class="nav-dropdown-item">Статистика и разбор от AI</a>
         <a href="{% url 'users:settings' %}" class="nav-dropdown-item">Настройки</a>
         <a href="{% url 'users:about' %}" class="nav-dropdown-item">О проекте</a>
       </div>
+    </div>
     </div>
   {% else %}
     <a href="{% url 'users:about' %}">О проекте</a>

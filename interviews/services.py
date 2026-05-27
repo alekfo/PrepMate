@@ -15,6 +15,7 @@ def _ask(prompt: str) -> str:
         response = requests.post(
             settings.CLAUDE_API_SERVICE_URL,
             json={"prompt": prompt},
+            headers={"X-API-Key": settings.CLAUDE_API_SERVICE_KEY},
             timeout=60,
         )
         response.raise_for_status()
@@ -29,6 +30,12 @@ def _ask(prompt: str) -> str:
 def _parse_json(text: str) -> dict | list:
     match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
     return json.loads(match.group(1) if match else text.strip())
+
+
+_VALID_TAGS = frozenset({
+    'depth', 'examples', 'structure', 'communication',
+    'confidence', 'relevance', 'experience', 'proactivity',
+})
 
 
 _LEVEL_INSTRUCTIONS = {
@@ -94,8 +101,194 @@ def evaluate_answer(question_text: str, answer_text: str, vacancy_context: str) 
                           "score": <число от 1 до 10>,
                           "strengths": ["сильная сторона 1", "сильная сторона 2"],
                           "improvements": ["что улучшить 1", "что улучшить 2"],
-                          "ideal_answer_hint": "краткий намёк на идеальный ответ"
-                        }}""")
+                          "ideal_answer_hint": "краткий намёк на идеальный ответ",
+                          "weakness_tags": [],
+                          "strength_tags": []
+                        }}
+
+                        Для weakness_tags выбери 0–2 тега из списка (только если явно выражено):
+                        depth, examples, structure, communication, confidence, relevance, experience, proactivity
+                        Для strength_tags — те же теги, но только если сторона явно продемонстрирована.
+                        Используй исключительно теги из этого списка, без собственных значений.""")
     result = _parse_json(text)
-    logger.info("Answer evaluated: score=%s", result.get('score'))
+    result['weakness_tags'] = [t for t in result.get('weakness_tags', []) if t in _VALID_TAGS]
+    result['strength_tags'] = [t for t in result.get('strength_tags', []) if t in _VALID_TAGS]
+    logger.info("Answer evaluated: score=%s weakness=%s strength=%s",
+                result.get('score'), result.get('weakness_tags'), result.get('strength_tags'))
     return result
+
+
+def generate_session_advice(session) -> dict:
+    logger.info("Generating session advice for session=%d", session.id)
+
+    feedbacks = []
+    for question in session.questions.prefetch_related('answer__feedback').all():
+        answer = getattr(question, 'answer', None)
+        feedback = getattr(answer, 'feedback', None) if answer else None
+        if feedback:
+            feedbacks.append({
+                'question': question.text,
+                'score': feedback.score,
+                'strengths': feedback.strengths,
+                'improvements': feedback.improvements,
+                'weakness_tags': feedback.weakness_tags,
+            })
+
+    questions_block = '\n'.join(
+        f'  {i+1}. [{f["score"]}/10] {f["question"]}\n'
+        f'     Слабые стороны: {", ".join(f["weakness_tags"]) or "—"}\n'
+        f'     Улучшить: {"; ".join(f["improvements"][:2])}'
+        for i, f in enumerate(feedbacks)
+    )
+
+    text = _ask(f"""Ты коуч по карьере. Проанализируй результаты прохождения mock-интервью и дай персональные рекомендации.
+
+Вакансия: {session.job_title or "не указана"}{f", {session.company_name}" if session.company_name else ""}
+Уровень: {session.get_level_display()}
+Контекст: {session.vacancy_text[:300]}
+
+Общий балл: {session.overall_score:.1f}/10
+Вопросы и оценки:
+{questions_block}
+
+Ответь строго в формате JSON:
+{{
+  "summary": "Общий вывод по сессии — 2-3 предложения, конкретно и честно",
+  "advice": [
+    "Конкретный совет 1, привязанный к слабым местам этой сессии",
+    "Конкретный совет 2",
+    "Конкретный совет 3"
+  ],
+  "focus_topics": ["Тема для изучения 1", "Тема для изучения 2"]
+}}
+
+focus_topics — конкретные темы или навыки для подготовки, привязанные к домену вакансии.""")
+
+    result = _parse_json(text)
+    logger.info("Session advice generated for session=%d", session.id)
+    return result
+
+
+def generate_vacancy_advice(vacancy_profile) -> dict:
+    logger.info("Generating vacancy advice for vacancy_profile=%d", vacancy_profile.id)
+
+    sessions = list(
+        vacancy_profile.sessions
+        .filter(status='completed')
+        .order_by('completed_at')
+        .prefetch_related('questions__answer__feedback')
+    )
+
+    # Собираем детальные данные по каждой сессии
+    session_rows = []
+    all_weakness_tags: list[str] = []
+    all_strength_tags: list[str] = []
+
+    for s in sessions:
+        questions = list(s.questions.all())
+        qa_lines = []
+        for q in questions:
+            answer = getattr(q, 'answer', None)
+            feedback = getattr(answer, 'feedback', None) if answer else None
+            if feedback:
+                all_weakness_tags.extend(feedback.weakness_tags)
+                all_strength_tags.extend(feedback.strength_tags)
+                top_issue = feedback.improvements[0] if feedback.improvements else ''
+                qa_lines.append(
+                    f'    [{feedback.score}/10] {q.text[:120]}'
+                    + (f'\n      → {top_issue}' if top_issue else '')
+                )
+
+        date_str = s.completed_at.strftime('%Y-%m-%d') if s.completed_at else '—'
+        qa_block = '\n'.join(qa_lines) if qa_lines else '    (нет данных)'
+        session_rows.append(
+            f'  Сессия {date_str}, общий балл {s.overall_score:.1f}:\n{qa_block}'
+        )
+
+    sessions_block = '\n\n'.join(session_rows)
+    total = len(sessions)
+
+    # Хронические и исправленные теги
+    chronic = _chronic_tags(sessions, threshold=0.5)
+    fixed = _fixed_tags(sessions, last_n=3)
+
+    chronic_line = f'Хронические слабые места: {", ".join(f"{t} ({c}/{total})" for t, c in chronic)}' if chronic else ''
+    fixed_line = f'Исправлено (не встречается в последних 3 сессиях): {", ".join(fixed)}' if fixed else ''
+
+    text = _ask(f"""Ты карьерный коуч. Проанализируй прогресс кандидата по вакансии на основе всех прошедших интервью и дай конкретные, персональные рекомендации.
+
+Вакансия: {vacancy_profile.job_title or "не указана"}{f", {vacancy_profile.company_name}" if vacancy_profile.company_name else ""}
+Требования вакансии: {vacancy_profile.vacancy_text[:500]}
+
+История интервью ({total}):
+{sessions_block}
+
+{chronic_line}
+{fixed_line}
+
+Пиши конкретно — ссылайся на реальные вопросы и замечания из истории выше. Избегай общих фраз.
+
+Ответь строго в формате JSON:
+{{
+  "overall_progress": "Общая оценка динамики — 2-3 предложения со ссылками на конкретные результаты",
+  "chronic_issues": ["Конкретная хроническая проблема со ссылкой на вопрос/тему", "..."],
+  "improvements": ["Конкретное улучшение с примером из истории", "..."],
+  "next_steps": [
+    "Конкретный шаг привязанный к слабым местам этого кандидата",
+    "...",
+    "..."
+  ],
+  "focus_topics": ["Конкретная тема из вопросов, где были проблемы", "..."],
+  "verdict": "Финальный вердикт: готов ли кандидат к этой вакансии — 1-2 предложения честно и конкретно"
+}}
+
+focus_topics — только темы, в которых кандидат реально ошибался. Не генерируй URL.""")
+
+    result = _parse_json(text)
+    logger.info("Vacancy advice generated for vacancy_profile=%d, sessions=%d", vacancy_profile.id, total)
+    return result
+
+
+def _top_tags(tags: list[str], n: int = 2) -> list[str]:
+    counts: dict[str, int] = {}
+    for t in tags:
+        counts[t] = counts.get(t, 0) + 1
+    return [t for t, _ in sorted(counts.items(), key=lambda x: -x[1])[:n]]
+
+
+def _chronic_tags(sessions: list, threshold: float = 0.5) -> list[tuple[str, int]]:
+    """Теги, встречающиеся в >= threshold доли сессий."""
+    total = len(sessions)
+    if not total:
+        return []
+    counts: dict[str, int] = {}
+    for s in sessions:
+        seen = set()
+        for q in s.questions.all():
+            feedback = getattr(getattr(q, 'answer', None), 'feedback', None)
+            if feedback:
+                for t in feedback.weakness_tags:
+                    if t not in seen:
+                        counts[t] = counts.get(t, 0) + 1
+                        seen.add(t)
+    return [(t, c) for t, c in counts.items() if c / total >= threshold]
+
+
+def _fixed_tags(sessions: list, last_n: int = 3) -> list[str]:
+    """Теги, которые были раньше, но отсутствуют в последних last_n сессиях."""
+    if len(sessions) <= last_n:
+        return []
+    early = sessions[:-last_n]
+    recent = sessions[-last_n:]
+
+    def session_tags(s) -> set[str]:
+        result = set()
+        for q in s.questions.all():
+            feedback = getattr(getattr(q, 'answer', None), 'feedback', None)
+            if feedback:
+                result.update(feedback.weakness_tags)
+        return result
+
+    early_tags = set().union(*[session_tags(s) for s in early])
+    recent_tags = set().union(*[session_tags(s) for s in recent])
+    return sorted(early_tags - recent_tags)

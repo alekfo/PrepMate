@@ -92,6 +92,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.User'
 
 CLAUDE_API_SERVICE_URL = os.environ.get('CLAUDE_API_SERVICE_URL', 'https://api.fieldlog.online/ask')
+CLAUDE_API_SERVICE_KEY = os.environ.get('SERVICE_API_KEY', '')
 
 LOGIN_URL = '/users/login/'
 LOGIN_REDIRECT_URL = '/'

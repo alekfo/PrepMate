@@ -8,6 +8,7 @@ done
 echo "Database ready."
 
 python manage.py migrate --noinput
+python manage.py backfill_vacancy_profiles
 python manage.py collectstatic --noinput
 
 exec gunicorn prep_mate.wsgi:application \

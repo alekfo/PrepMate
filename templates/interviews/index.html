@@ -3,7 +3,7 @@
 {% block title %}PrepStats — Подготовка к интервью{% endblock %}
 
 {% block content %}
-<div class="page">
+<div class="page page--index">
   {% if user.is_authenticated %}
   <h1>Готов проверить себя?</h1>
   <p class="subtitle">Вставьте текст вакансии — AI сгенерирует 8 персональных вопросов и даст подробный отчёт по каждому ответу.</p>
@@ -15,70 +15,68 @@
   {% if user.is_authenticated %}
     <form method="post" action="{% url 'interviews:start' %}" id="startForm">
       {% csrf_token %}
+      <div class="form-card">
+        <label class="form-card-label" for="vacancy_text">Текст вакансии</label>
+        <textarea
+          id="vacancy_text"
+          name="vacancy_text"
+          rows="5"
+          placeholder="Вставьте описание вакансии сюда..."
+          style="resize: none; overflow: hidden;"
+          {% if not user.email_confirmed or limit_reached %}disabled{% endif %}
+          required
+        ></textarea>
 
-      <div class="vacancy-label-row">
-        <label for="vacancy_text">Текст вакансии</label>
         {% if past_vacancies %}
-          <div class="vacancy-history-wrap">
-            <select id="vacancyHistory" class="vacancy-history-select">
-              <option value="">Из истории</option>
-              {% for s in past_vacancies %}
-                <option value="{{ s.vacancy_text }}">
-                  {% if s.job_title %}{{ s.job_title }}{% if s.company_name %} · {{ s.company_name }}{% endif %}
-                  {% elif s.company_name %}{{ s.company_name }}
-                  {% else %}{{ s.vacancy_text|truncatechars:40 }}{% endif %}
-                </option>
-              {% endfor %}
-            </select>
-          </div>
-        {% endif %}
-      </div>
-      <textarea
-        id="vacancy_text"
-        name="vacancy_text"
-        rows="4"
-        placeholder="Вставьте описание вакансии сюда..."
-        style="resize: none; overflow: hidden;"
-        {% if not user.email_confirmed or limit_reached %}disabled{% endif %}
-        required
-      ></textarea>
-
-      <div class="level-row">
-        <label class="level-label">Сложность вопросов</label>
-        {% if user.is_subscribed or user.is_premium %}
-          <div class="level-select-wrap">
-            <select name="level" class="level-select">
-              <option value="">Без уровня</option>
-              <option value="junior">Junior</option>
-              <option value="middle">Middle</option>
-              <option value="pro">Pro</option>
-            </select>
-          </div>
-        {% else %}
-          <div class="level-blocked-wrap">
-            <div class="level-select-wrap">
-              <select disabled class="level-select level-select--disabled">
-                <option>Без уровня</option>
+          <div class="form-card-history">
+            <div class="vacancy-history-wrap">
+              <select id="vacancyHistory" class="vacancy-history-select">
+                <option value="">Из истории</option>
+                {% for s in past_vacancies %}
+                  <option value="{{ s.vacancy_text }}">
+                    {% if s.job_title %}{{ s.job_title }}{% if s.company_name %} · {{ s.company_name }}{% endif %}
+                    {% elif s.company_name %}{{ s.company_name }}
+                    {% else %}{{ s.vacancy_text|truncatechars:40 }}{% endif %}
+                  </option>
+                {% endfor %}
               </select>
             </div>
+          </div>
+        {% endif %}
+
+        {% if user.is_subscribed or user.is_premium %}
+          <div class="level-pills" id="levelPills">
+            <input type="hidden" name="level" id="levelInput" value="">
+            <button type="button" class="level-pill active" data-value="">Без уровня</button>
+            <button type="button" class="level-pill" data-value="junior">Junior</button>
+            <button type="button" class="level-pill" data-value="middle">Middle</button>
+            <button type="button" class="level-pill" data-value="pro">Pro</button>
+          </div>
+        {% else %}
+          <div class="level-pills level-pills--locked" id="levelPills">
+            <input type="hidden" name="level" id="levelInput" value="">
+            <button type="button" class="level-pill active" data-value="">Без уровня</button>
+            <button type="button" class="level-pill level-pill--locked" disabled>Junior</button>
+            <button type="button" class="level-pill level-pill--locked" disabled>Middle</button>
+            <button type="button" class="level-pill level-pill--locked" disabled>Pro</button>
             <span class="btn-tooltip">Доступно по подписке</span>
           </div>
         {% endif %}
-      </div>
 
-      {% if not user.email_confirmed %}
-        <div class="btn-blocked-wrap">
-          <button type="button" class="btn">Начать интервью</button>
-          <span class="btn-tooltip">Сначала подтвердите email — Настройки → Аккаунт</span>
-        </div>
-      {% elif limit_reached %}
-        <div class="btn-blocked-wrap">
-          <button type="button" class="btn">Начать интервью</button>
-          <span class="btn-tooltip">Дневной лимит исчерпан — возвращайтесь завтра</span>
-        </div>
-      {% else %}
-        <button type="submit" class="btn" id="startBtn">Начать интервью</button>
-      {% endif %}
+        {% if not user.email_confirmed %}
+          <div class="btn-blocked-wrap">
+            <button type="button" class="btn">Начать интервью</button>
+            <span class="btn-tooltip">Сначала подтвердите email — Настройки → Аккаунт</span>
+          </div>
+        {% elif limit_reached %}
+          <div class="btn-blocked-wrap">
+            <button type="button" class="btn">Начать интервью</button>
+            <span class="btn-tooltip">Дневной лимит исчерпан — возвращайтесь завтра</span>
+          </div>
+        {% else %}
+          <button type="submit" class="btn" id="startBtn">Начать интервью</button>
+        {% endif %}
+      </div>
     </form>
 
     <script>
@@ -101,6 +99,15 @@
           }
         });
       }
+
+      const levelInput = document.getElementById('levelInput');
+      document.querySelectorAll('.level-pills:not(.level-pills--locked) .level-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          document.querySelectorAll('.level-pill').forEach(p => p.classList.remove('active'));
+          pill.classList.add('active');
+          levelInput.value = pill.dataset.value;
+        });
+      });
 
       {% if user.email_confirmed and not limit_reached %}
       document.getElementById('startForm').addEventListener('submit', function () {
