@@ -177,6 +177,11 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 
 Адрес прокси задаётся через `CLAUDE_API_SERVICE_URL`, ключ авторизации — через `CLAUDE_API_SERVICE_KEY` (env `SERVICE_API_KEY`).
 
+**`_ask(prompt, _retries=2)`** — внутренний хелпер. Выполняет до 3 попыток (1 + 2 retry) с паузами 1s и 2s:
+- Retry при `RequestException` (сетевые ошибки)
+- Retry при пустом ответе (`response.json().get("response", "")` — пустая строка)
+- Если все попытки исчерпаны — бросает `RuntimeError`
+
 **`generate_questions(vacancy_text, level='common')`** — 1 запрос при старте сессии.
 При `level` ≠ `'common'` добавляет в промпт инструкцию по уровню из `_LEVEL_INSTRUCTIONS`.
 Возвращает `{"job_title": ..., "company_name": ..., "questions": [{text, type}, ...]}`.
@@ -184,9 +189,9 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 **`evaluate_answer(question_text, answer_text, vacancy_context)`** — 1 запрос после каждого ответа.
 Возвращает `{"score": 1-10, "strengths": [...], "improvements": [...], "ideal_answer_hint": ..., "weakness_tags": [...], "strength_tags": [...]}`.
 
-**`generate_session_advice(session)`** — 1 запрос при первом визите подписчика на статистику вакансии (для каждой сессии без `SessionAdvice`). Передаёт в промпт все вопросы, оценки и замечания сессии. Возвращает `{"summary": ..., "advice": [...], "focus_topics": [...]}`.
+**`generate_session_advice(session)`** — 1 запрос при первом визите подписчика на статистику вакансии (для каждой сессии без `SessionAdvice`). Передаёт уровень сессии в промпт с инструкцией оценивать результаты относительно уровня подготовки, а не как финальное собеседование. Тон промпта — мотивирующий коуч. Возвращает `{"summary": ..., "advice": [...], "focus_topics": [...]}`.
 
-**`generate_vacancy_advice(vacancy_profile)`** — 1 запрос при генерации/обновлении `VacancyAdvice`. Передаёт развёрнутую историю всех сессий: тексты вопросов с оценками и главным замечанием фидбека по каждому вопросу, хронические и исправленные теги. Возвращает `{"overall_progress": ..., "chronic_issues": [...], "improvements": [...], "next_steps": [...], "focus_topics": [...], "verdict": ...}`.
+**`generate_vacancy_advice(vacancy_profile)`** — 1 запрос при генерации/обновлении `VacancyAdvice`. Передаёт развёрнутую историю всех сессий, хронические и исправленные теги, а также **уровни подготовки** (`Counter` по `session.get_level_display()`). Промпт явно указывает оценивать прогресс относительно этих уровней. Вердикт запрашивается в формате «что работает + что блокирует + реалистичный срок» — без бинарного «готов/не готов». Возвращает `{"overall_progress": ..., "chronic_issues": [...], "improvements": [...], "next_steps": [...], "focus_topics": [...], "verdict": ...}`.
 
 Итого **9 запросов** на одну полную сессию (1 + 8). Запросы статистики — дополнительно, только для подписчиков. Ответ парсится через `_parse_json()`, которая снимает markdown-обёртку ` ```json ``` `.
 
@@ -287,6 +292,16 @@ View `statistics_vacancy`. Доступ: `vacancy_profile.user == request.user`.
 1. Для каждой завершённой сессии без `SessionAdvice` — вызывается `generate_session_advice()`, создаётся запись
 2. Если `VacancyAdvice` отсутствует или `session_count_at_generation < текущее_кол-во_сессий` — вызывается `generate_vacancy_advice()`, создаётся/обновляется запись
 
+**Защита от двойных API-запросов при сбоях** (`django.core.cache`):
+- Перед вызовом `generate_vacancy_advice` в кэш пишется флаг `vacancy_advice_attempt_<id>` (TTL 5 минут)
+- Повторные визиты в течение 5 минут не триггерят новый запрос к API
+- При успешной генерации флаг удаляется немедленно (`cache.delete`)
+- Если генерация упала или кулдаун активен — в шаблон передаётся `advice_stale=True`
+
+**Баннер устаревших данных** (`advice-stale-banner` в шаблоне):
+- Если `advice_stale=True` и `VacancyAdvice` существует → «Анализ обновляется — показаны данные предыдущих сессий»
+- Если `advice_stale=True` и `VacancyAdvice` нет → «Не удалось получить AI-анализ. Зайдите через пару минут»
+
 **SVG-график** `overall_score` по сессиям (без JS-библиотек):
 - Координаты вычисляются в Python (`_build_chart_points`, `_build_chart_labels`): `pad_left=52, plot_w=536, pad_top=8, plot_h=124`, `viewBox="0 0 600 145"`
 - Координаты передаются как **целые числа** (не float!) — Django рендерит float через русскую локаль с запятой (`320,0`), что ломает SVG. Округление через `round()` → int решает проблему.
@@ -301,6 +316,14 @@ View `statistics_vacancy`. Доступ: `vacancy_profile.user == request.user`.
 View `subscription` в `users/views.py`. Показывает три тарифа (Бесплатный / Базовый 299₽ / Премиум 599₽) с текущим статусом пользователя. Кнопки оплаты заглушены (tooltip «Оплата появится скоро»).
 
 Текущий план определяется: `is_premium` → `'premium'`, `is_subscribed` → `'subscribed'`, иначе `'free'`.
+
+Логика кнопок по тарифам (downgrade недоступен):
+
+| Текущий план | Бесплатный | Базовый | Премиум |
+|---|---|---|---|
+| `free` | Активен | Купить | Купить |
+| `subscribed` | Недоступно | Активен | Купить |
+| `premium` | Недоступно | Недоступно | Активен |
 
 ## Страница настроек (`/users/settings/`)
 

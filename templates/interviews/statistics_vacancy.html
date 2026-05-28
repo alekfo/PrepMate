@@ -55,6 +55,16 @@
       </div>
     {% endif %}
 
+    {% if advice_stale %}
+      <div class="advice-stale-banner">
+        {% if vacancy_advice %}
+          Анализ обновляется — показаны данные предыдущих сессий. Зайдите через пару минут.
+        {% else %}
+          Не удалось получить AI-анализ. Зайдите через пару минут.
+        {% endif %}
+      </div>
+    {% endif %}
+
     {% if vacancy_advice %}
       <div class="advice-card">
         <div class="advice-card-header">

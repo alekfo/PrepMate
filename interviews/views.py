@@ -4,6 +4,7 @@ from collections import Counter
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.cache import cache
 from django.utils import timezone
 from django.db.models import Count, Q
 
@@ -311,7 +312,11 @@ def statistics_vacancy(request, vacancy_id):
         except VacancyAdvice.DoesNotExist:
             vacancy_advice = None
 
-        if vacancy_advice is None or vacancy_advice.session_count_at_generation < current_count:
+        needs_update = vacancy_advice is None or vacancy_advice.session_count_at_generation < current_count
+        cooldown_key = f"vacancy_advice_attempt_{vacancy_profile.id}"
+        advice_stale = False
+        if needs_update and not cache.get(cooldown_key):
+            cache.set(cooldown_key, True, timeout=300)
             try:
                 data = generate_vacancy_advice(vacancy_profile)
                 fields = {
@@ -331,8 +336,12 @@ def statistics_vacancy(request, vacancy_id):
                     for k, v in fields.items():
                         setattr(vacancy_advice, k, v)
                     vacancy_advice.save()
+                cache.delete(cooldown_key)
             except Exception as e:
                 logger.error("generate_vacancy_advice failed: vacancy_profile=%d: %s", vacancy_profile.id, e)
+                advice_stale = True
+        elif needs_update:
+            advice_stale = True
 
     sessions_display = [
         {'session': s, 'number': len(completed_sessions) - i}
@@ -347,6 +356,7 @@ def statistics_vacancy(request, vacancy_id):
         'chart_labels': _build_chart_labels(completed_sessions),
         'tag_stats': _build_tag_stats(completed_sessions),
         'vacancy_advice': vacancy_advice,
+        'advice_stale': advice_stale,
     })
 
 

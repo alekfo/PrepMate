@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import time
+from collections import Counter
 
 import requests
 from django.conf import settings
@@ -9,22 +10,33 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def _ask(prompt: str) -> str:
-    t0 = time.monotonic()
-    try:
-        response = requests.post(
-            settings.CLAUDE_API_SERVICE_URL,
-            json={"prompt": prompt},
-            headers={"X-API-Key": settings.CLAUDE_API_SERVICE_KEY},
-            timeout=60,
-        )
-        response.raise_for_status()
-    except requests.RequestException as e:
-        logger.error("Claude API request failed (%.1fs): %s", time.monotonic() - t0, e)
-        raise
-    elapsed = time.monotonic() - t0
-    logger.debug("Claude API response in %.1fs, %d chars", elapsed, len(response.text))
-    return response.json()["response"]
+def _ask(prompt: str, _retries: int = 2) -> str:
+    for attempt in range(_retries + 1):
+        t0 = time.monotonic()
+        try:
+            response = requests.post(
+                settings.CLAUDE_API_SERVICE_URL,
+                json={"prompt": prompt},
+                headers={"X-API-Key": settings.CLAUDE_API_SERVICE_KEY},
+                timeout=60,
+            )
+            response.raise_for_status()
+        except requests.RequestException as e:
+            if attempt < _retries:
+                logger.warning("Claude API request failed, retry %d/%d: %s", attempt + 1, _retries, e)
+                time.sleep(2 ** attempt)
+                continue
+            logger.error("Claude API request failed (%.1fs): %s", time.monotonic() - t0, e)
+            raise
+        elapsed = time.monotonic() - t0
+        text = response.json().get("response", "")
+        if text.strip():
+            logger.debug("Claude API response in %.1fs, %d chars", elapsed, len(text))
+            return text
+        if attempt < _retries:
+            logger.warning("Empty response from Claude API, retry %d/%d", attempt + 1, _retries)
+            time.sleep(2 ** attempt)
+    raise RuntimeError("Claude API returned empty response after retries")
 
 
 def _parse_json(text: str) -> dict | list:
@@ -141,11 +153,13 @@ def generate_session_advice(session) -> dict:
         for i, f in enumerate(feedbacks)
     )
 
-    text = _ask(f"""Ты коуч по карьере. Проанализируй результаты прохождения mock-интервью и дай персональные рекомендации.
+    text = _ask(f"""Ты мотивирующий карьерный коуч. Проанализируй результаты прохождения mock-интервью и дай персональные рекомендации.
 
 Вакансия: {session.job_title or "не указана"}{f", {session.company_name}" if session.company_name else ""}
-Уровень: {session.get_level_display()}
+Уровень подготовки: {session.get_level_display()}
 Контекст: {session.vacancy_text[:300]}
+
+Важно: кандидат проходит mock-интервью на уровне «{session.get_level_display()}». Оценивай результаты относительно этого уровня подготовки — не как итоговое собеседование на вакансию.
 
 Общий балл: {session.overall_score:.1f}/10
 Вопросы и оценки:
@@ -153,7 +167,7 @@ def generate_session_advice(session) -> dict:
 
 Ответь строго в формате JSON:
 {{
-  "summary": "Общий вывод по сессии — 2-3 предложения, конкретно и честно",
+  "summary": "Общий вывод по сессии — 2-3 предложения. Отметь что получилось хорошо и что стоит улучшить. Тон: поддерживающий, конкретный.",
   "advice": [
     "Конкретный совет 1, привязанный к слабым местам этой сессии",
     "Конкретный совет 2",
@@ -208,6 +222,12 @@ def generate_vacancy_advice(vacancy_profile) -> dict:
     sessions_block = '\n\n'.join(session_rows)
     total = len(sessions)
 
+    level_counts = Counter(s.get_level_display() for s in sessions)
+    levels_used = ', '.join(
+        f'{label} ({count} сес.)' if count > 1 else label
+        for label, count in level_counts.most_common()
+    )
+
     # Хронические и исправленные теги
     chronic = _chronic_tags(sessions, threshold=0.5)
     fixed = _fixed_tags(sessions, last_n=3)
@@ -215,10 +235,13 @@ def generate_vacancy_advice(vacancy_profile) -> dict:
     chronic_line = f'Хронические слабые места: {", ".join(f"{t} ({c}/{total})" for t, c in chronic)}' if chronic else ''
     fixed_line = f'Исправлено (не встречается в последних 3 сессиях): {", ".join(fixed)}' if fixed else ''
 
-    text = _ask(f"""Ты карьерный коуч. Проанализируй прогресс кандидата по вакансии на основе всех прошедших интервью и дай конкретные, персональные рекомендации.
+    text = _ask(f"""Ты мотивирующий карьерный коуч. Проанализируй прогресс кандидата по вакансии на основе всех прошедших интервью и дай конкретные, персональные рекомендации.
 
 Вакансия: {vacancy_profile.job_title or "не указана"}{f", {vacancy_profile.company_name}" if vacancy_profile.company_name else ""}
 Требования вакансии: {vacancy_profile.vacancy_text[:500]}
+Уровень подготовки: {levels_used}
+
+Важно: кандидат проходил mock-интервью на уровне «{levels_used}». Оценивай прогресс и готовность относительно этого уровня подготовки — не как финальный вердикт по всей вакансии.
 
 История интервью ({total}):
 {sessions_block}
@@ -230,7 +253,7 @@ def generate_vacancy_advice(vacancy_profile) -> dict:
 
 Ответь строго в формате JSON:
 {{
-  "overall_progress": "Общая оценка динамики — 2-3 предложения со ссылками на конкретные результаты",
+  "overall_progress": "Общая оценка динамики — 2-3 предложения со ссылками на конкретные результаты. Отметь рост там, где он есть.",
   "chronic_issues": ["Конкретная хроническая проблема со ссылкой на вопрос/тему", "..."],
   "improvements": ["Конкретное улучшение с примером из истории", "..."],
   "next_steps": [
@@ -239,7 +262,7 @@ def generate_vacancy_advice(vacancy_profile) -> dict:
     "..."
   ],
   "focus_topics": ["Конкретная тема из вопросов, где были проблемы", "..."],
-  "verdict": "Финальный вердикт: готов ли кандидат к этой вакансии — 1-2 предложения честно и конкретно"
+  "verdict": "Оцени где сейчас находится кандидат на пути к этой вакансии: что уже работает на нужном уровне, 1-2 темы которые блокируют прохождение, реалистичный срок до готовности при целенаправленной подготовке. Тон — поддерживающий, без приговора."
 }}
 
 focus_topics — только темы, в которых кандидат реально ошибался. Не генерируй URL.""")
