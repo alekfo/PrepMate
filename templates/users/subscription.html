@@ -50,6 +50,8 @@
       </ul>
       {% if current_plan == 'subscribed' %}
         <span class="btn btn-secondary" style="width:100%; justify-content:center; cursor:default; opacity:0.45; pointer-events:none;">Активен</span>
+      {% elif current_plan == 'premium' %}
+        <span class="btn btn-secondary" style="width:100%; justify-content:center; cursor:default; opacity:0.45; pointer-events:none;">Недоступно</span>
       {% else %}
         <div class="btn-blocked-wrap" style="width:100%; margin-top:0;">
           <span class="btn" style="width:100%; justify-content:center; pointer-events:none;">Купить</span>
