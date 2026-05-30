@@ -89,10 +89,33 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+        'LOCATION': '/tmp/django_cache_prepstats',
+    }
+}
+
 AUTH_USER_MODEL = 'users.User'
 
 CLAUDE_API_SERVICE_URL = os.environ.get('CLAUDE_API_SERVICE_URL', 'https://api.fieldlog.online/ask')
 CLAUDE_API_SERVICE_KEY = os.environ.get('SERVICE_API_KEY', '')
+
+YOOKASSA_SHOP_ID = os.environ.get('YOOKASSA_SHOP_ID', '')
+YOOKASSA_SECRET_KEY = os.environ.get('YOOKASSA_SECRET_KEY', '')
+
+# Интервью в день по плану (free / subscribed / premium)
+SUBSCRIPTION_LIMITS = {
+    'free': 1,
+    'subscribed': 2,
+    'premium': 5,
+}
+
+# Цены в рублях
+SUBSCRIPTION_PRICES = {
+    'subscribed': '399.00',
+    'premium': '799.00',
+}
 
 LOGIN_URL = '/users/login/'
 LOGIN_REDIRECT_URL = '/'

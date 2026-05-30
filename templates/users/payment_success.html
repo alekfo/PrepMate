@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Оплата прошла — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page" style="max-width:520px; text-align:center;">
+  <div style="font-size:3rem; margin-bottom:1rem;">✓</div>
+  <h1>Подписка активирована!</h1>
+  <p class="subtitle">Оплата прошла успешно. Доступ к расширенным возможностям уже открыт.</p>
+  <p style="color:var(--text-muted); margin-bottom:2rem;">
+    Чек будет отправлен через сервис «Мой налог» на вашу почту.
+  </p>
+  <a href="{% url 'interviews:index' %}" class="btn">Начать интервью</a>
+</div>
+{% endblock %}

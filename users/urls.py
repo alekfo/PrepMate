@@ -16,6 +16,9 @@ urlpatterns = [
     path('contact/', views.contact, name='contact'),
     path('send-confirmation/', views.send_confirmation, name='send_confirmation'),
     path('confirm-email/', views.confirm_email, name='confirm_email'),
+    path('payment/create/', views.create_payment, name='create_payment'),
+    path('payment/webhook/', views.payment_webhook, name='payment_webhook'),
+    path('payment/return/', views.payment_return, name='payment_return'),
     path('password-change/',
          auth_views.PasswordChangeView.as_view(
              template_name='users/password_change.html',
