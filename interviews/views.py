@@ -1,4 +1,5 @@
 import logging
+import random
 from collections import Counter
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -357,6 +358,88 @@ def statistics_vacancy(request, vacancy_id):
         'tag_stats': _build_tag_stats(completed_sessions),
         'vacancy_advice': vacancy_advice,
         'advice_stale': advice_stale,
+    })
+
+
+@login_required
+def flashcards(request):
+    has_subscription = request.user.is_subscribed or request.user.is_premium
+    if not has_subscription:
+        return redirect('users:subscription')
+
+    vacancies = [
+        vp for vp in VacancyProfile.objects.filter(user=request.user).order_by('-created_at')
+        if vp.sessions.filter(status='completed').exists()
+    ]
+
+    return render(request, 'interviews/flashcards.html', {
+        'vacancies': vacancies,
+        'tag_labels': _TAG_LABELS,
+    })
+
+
+@login_required
+def flashcards_train(request):
+    has_subscription = request.user.is_subscribed or request.user.is_premium
+    if not has_subscription:
+        return redirect('users:subscription')
+
+    vacancy_id = request.GET.get('vacancy_id')
+    if not vacancy_id:
+        return redirect('interviews:flashcards')
+
+    vacancy_profile = get_object_or_404(VacancyProfile, id=vacancy_id, user=request.user)
+
+    question_type = request.GET.get('question_type', '')
+    tag = request.GET.get('tag', '')
+    level = request.GET.get('level', '')
+    weak_only = request.GET.get('weak_only') == '1'
+
+    qs = Question.objects.filter(
+        session__vacancy_profile=vacancy_profile,
+        session__status='completed',
+        answer__isnull=False,
+        answer__feedback__isnull=False,
+    ).select_related('answer__feedback')
+
+    if question_type in ('technical', 'behavioral', 'situational'):
+        qs = qs.filter(question_type=question_type)
+
+    if level in ('common', 'junior', 'middle', 'pro'):
+        qs = qs.filter(session__level=level)
+
+    if weak_only:
+        qs = qs.filter(answer__feedback__score__lt=4)
+
+    questions = list(qs)
+
+    if tag in _TAG_LABELS:
+        questions = [q for q in questions if tag in (q.answer.feedback.weakness_tags or [])]
+
+    random.shuffle(questions)
+
+    if not questions:
+        messages.warning(request, 'По выбранным фильтрам вопросов не найдено. Попробуйте изменить параметры.')
+        return redirect('interviews:flashcards')
+
+    cards = [
+        {
+            'text': q.text,
+            'type_display': q.get_question_type_display(),
+            'score': q.answer.feedback.score,
+            'hint': q.answer.feedback.ideal_answer_hint,
+        }
+        for q in questions
+    ]
+
+    return render(request, 'interviews/flashcards_train.html', {
+        'vacancy': vacancy_profile,
+        'cards': cards,
+        'total': len(cards),
+        'weak_only': weak_only,
+        'tag_label': _TAG_LABELS.get(tag, ''),
+        'question_type_label': dict(Question.QUESTION_TYPE_CHOICES).get(question_type, ''),
+        'level_label': dict(InterviewSession.LEVEL_CHOICES).get(level, ''),
     })
 
 
