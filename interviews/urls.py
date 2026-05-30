@@ -12,4 +12,6 @@ urlpatterns = [
     path('session/<int:session_id>/report/', views.report, name='report'),
     path('statistics/', views.statistics_overview, name='statistics'),
     path('statistics/vacancy/<int:vacancy_id>/', views.statistics_vacancy, name='statistics_vacancy'),
+    path('flashcards/', views.flashcards, name='flashcards'),
+    path('flashcards/train/', views.flashcards_train, name='flashcards_train'),
 ]

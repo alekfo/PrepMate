@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Обработка платежа — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page" style="max-width:520px; text-align:center;">
+  <div style="font-size:3rem; margin-bottom:1rem;">⏳</div>
+  <h1>Платёж обрабатывается</h1>
+  <p class="subtitle">Оплата ещё не подтверждена. Обычно это занимает несколько секунд.</p>
+  <p style="color:var(--text-muted); margin-bottom:2rem;">
+    Обновите страницу через минуту — подписка активируется автоматически,
+    как только банк подтвердит платёж.
+  </p>
+  <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+    <a href="{% url 'users:payment_return' %}" class="btn btn-secondary">Обновить</a>
+    <a href="{% url 'users:subscription' %}" class="btn">Страница подписки</a>
+  </div>
+</div>
+{% endblock %}

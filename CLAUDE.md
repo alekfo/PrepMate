@@ -7,6 +7,7 @@
 - **Python 3.12**, **Django 6.0**
 - **SQLite** (dev) / **PostgreSQL** (prod, через `DATABASE_URL=postgres`)
 - **requests** — HTTP-клиент для вызова Claude API через внешний прокси-сервис
+- **yookassa** — официальный Python SDK для приёма платежей через ЮKassa
 - **gevent** — асинхронные воркеры для gunicorn
 - **python-dotenv** — переменные окружения из `.env`
 - Фронтенд: чистые Django-шаблоны + CSS (без JS-фреймворков)
@@ -21,22 +22,27 @@ interviews/       — основное приложение
   services.py     — generate_questions(), evaluate_answer() (Claude API через прокси)
   urls.py         — маршруты приложения
   admin.py        — регистрация моделей
-users/            — кастомная модель пользователя + auth-страницы
-  models.py       — User (AbstractUser + доп. поля)
+users/            — кастомная модель пользователя + auth-страницы + платежи
+  models.py       — User (AbstractUser + доп. поля), Payment, Subscription
   views.py        — register, settings_page, privacy_policy, public_offer,
-                    about, contact, send_confirmation, confirm_email
+                    about, contact, send_confirmation, confirm_email,
+                    create_payment, payment_webhook, payment_return
+  services.py     — create_yookassa_payment(), activate_subscription(),
+                    deactivate_user_subscription(), send_subscription_expired_email()
   forms.py        — RegisterForm, ContactForm
   urls.py         — маршруты users-приложения
-  admin.py        — CustomUserAdmin
+  admin.py        — CustomUserAdmin, PaymentAdmin, SubscriptionAdmin
+  management/commands/deactivate_expired_subscriptions.py — cron-команда
 templates/
   base.html       — навбар, спиннер-оверлей, футер
-  interviews/     — index, question, report, history
+  interviews/     — index, question, report, history, flashcards, flashcards_train
   users/          — login, register, settings, about, contact,
                     privacy_policy, public_offer,
                     password_change, password_change_done,
                     password_reset, password_reset_done,
                     password_reset_confirm, password_reset_complete,
-                    password_reset_email.txt (email-шаблон)
+                    password_reset_email.txt (email-шаблон),
+                    subscription, payment_success, payment_pending
 static/css/main.css — минималистичный стиль (Inter/Outfit, нейтральная палитра)
                       включает медиазапросы для мобильных (≤ 600px)
 nginx/nginx.conf  — конфиг nginx: HTTPS, редирект www→apex, return 444 для чужих Host
@@ -49,10 +55,37 @@ nginx/nginx.conf  — конфиг nginx: HTTPS, редирект www→apex, re
 |---|---|---|---|
 | `email` | EmailField | — | Уникальный (unique=True), обязательный при регистрации |
 | `interviews_used` | PositiveIntegerField | 0 | Всего интервью запущено (инкремент при старте) |
-| `interviews_limit_per_day` | PositiveSmallIntegerField | 1 | Дневной лимит (настраивается в админке) |
-| `is_subscribed` | BooleanField | False | Базовая подписка |
-| `is_premium` | BooleanField | False | Расширенная подписка |
+| `interviews_limit_per_day` | PositiveSmallIntegerField | 1 | Дневной лимит; **управляется автоматически** через `activate_subscription` / `deactivate_user_subscription` — вручную не менять |
+| `is_subscribed` | BooleanField | False | Базовая подписка активна |
+| `is_premium` | BooleanField | False | Премиум подписка активна |
 | `email_confirmed` | BooleanField | False | Подтверждён ли email |
+| `subscription_expires_at` | DateTimeField | null | Дата истечения активной подписки |
+
+Лимиты по плану (`settings.SUBSCRIPTION_LIMITS`): `free` → 1, `subscribed` → 2, `premium` → 5.
+
+### users.Payment
+Создаётся при каждом нажатии «Купить» — до перехода на страницу YooKassa.
+| Поле | Тип | Назначение |
+|---|---|---|
+| `user` | FK → User | Плательщик |
+| `plan` | CharField | `subscribed` / `premium` |
+| `amount` | DecimalField | Сумма в рублях |
+| `yookassa_payment_id` | CharField (unique) | ID платежа в YooKassa |
+| `status` | CharField | `pending` / `succeeded` / `canceled` |
+| `created_at` | DateTimeField | auto_now_add |
+
+### users.Subscription
+Создаётся в `activate_subscription()` после получения webhook `payment.succeeded`.
+| Поле | Тип | Назначение |
+|---|---|---|
+| `user` | FK → User | Владелец |
+| `payment` | OneToOne → Payment | Платёж, создавший подписку |
+| `plan` | CharField | `subscribed` / `premium` |
+| `started_at` | DateTimeField | auto_now_add |
+| `expires_at` | DateTimeField | started_at + 30 дней |
+| `is_active` | BooleanField | True пока не истекла |
+
+Деактивация: management command `deactivate_expired_subscriptions` (запускается через cron ежедневно в 3:00 и при каждом деплое через `entrypoint.sh`).
 
 ### interviews.VacancyProfile
 Группирует сессии одного пользователя по одному тексту вакансии.
@@ -119,6 +152,8 @@ OneToOne → VacancyProfile. Агрегированный AI-анализ про
 /session/<id>/report/                       → report (итоговый отчёт)
 /statistics/                                → statistics_overview (список вакансий, только подписчики)
 /statistics/vacancy/<id>/                   → statistics_vacancy (детальная страница вакансии)
+/flashcards/                                → flashcards (выбор вакансии и фильтров, только подписчики)
+/flashcards/train/                          → flashcards_train (GET с параметрами фильтрации)
 
 /users/login/                               → login
 /users/logout/                              → logout (только POST)
@@ -131,6 +166,9 @@ OneToOne → VacancyProfile. Агрегированный AI-анализ про
 /users/contact/                             → форма обратной связи
 /users/send-confirmation/                   → POST, отправляет письмо подтверждения email
 /users/confirm-email/?token=...             → подтверждение email по токену
+/users/payment/create/                      → POST, создаёт платёж в YooKassa и редиректит на него
+/users/payment/webhook/                     → POST @csrf_exempt, принимает уведомления от YooKassa
+/users/payment/return/                      → страница возврата после оплаты (success / pending)
 /users/password-change/                     → смена пароля (требует login)
 /users/password-change/done/               → успешная смена пароля
 /users/password-reset/                      → запрос сброса пароля (email)
@@ -204,6 +242,9 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 CLAUDE_API_SERVICE_URL=https://api.fieldlog.online/ask   # прокси к Claude
 SERVICE_API_KEY=...                                      # X-API-Key для прокси
 
+YOOKASSA_SHOP_ID=...       # shopId из ЛК ЮKassa
+YOOKASSA_SECRET_KEY=...    # Секретный ключ из ЛК ЮKassa → Настройки → Ключи API
+
 EMAIL_HOST=smtp.yandex.ru
 EMAIL_PORT=465
 EMAIL_USE_SSL=True
@@ -233,8 +274,9 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 1. Ждёт готовности PostgreSQL (polling через psycopg2)
 2. `python manage.py migrate --noinput`
 3. `python manage.py backfill_vacancy_profiles` — привязывает старые сессии к `VacancyProfile` (идемпотентно, безопасно при каждом деплое)
-4. `python manage.py collectstatic --noinput`
-5. Запускает gunicorn: `gevent` воркеры, 2 workers, 20 connections, timeout 120s
+4. `python manage.py deactivate_expired_subscriptions` — деактивирует истёкшие подписки (идемпотентно; основной запуск — cron ежедневно в 3:00)
+5. `python manage.py collectstatic --noinput`
+6. Запускает gunicorn: `gevent` воркеры, 2 workers, 20 connections, timeout 120s
 
 **nginx** (`nginx/nginx.conf`):
 - `default_server` на 80 и 443 → `return 444` (блокирует сканеры с чужим Host)
@@ -292,6 +334,8 @@ View `statistics_vacancy`. Доступ: `vacancy_profile.user == request.user`.
 1. Для каждой завершённой сессии без `SessionAdvice` — вызывается `generate_session_advice()`, создаётся запись
 2. Если `VacancyAdvice` отсутствует или `session_count_at_generation < текущее_кол-во_сессий` — вызывается `generate_vacancy_advice()`, создаётся/обновляется запись
 
+**Кэш** (`django.core.cache`): используется `FileBasedCache` (`/tmp/django_cache_prepstats`) — межпроцессный, работает при нескольких gunicorn-воркерах. LocMemCache не подходит, так как каждый воркер видит только свою память.
+
 **Защита от двойных API-запросов при сбоях** (`django.core.cache`):
 - Перед вызовом `generate_vacancy_advice` в кэш пишется флаг `vacancy_advice_attempt_<id>` (TTL 5 минут)
 - Повторные визиты в течение 5 минут не триггерят новый запрос к API
@@ -313,7 +357,7 @@ View `statistics_vacancy`. Доступ: `vacancy_profile.user == request.user`.
 
 ### Страница подписки (`/users/subscription/`)
 
-View `subscription` в `users/views.py`. Показывает три тарифа (Бесплатный / Базовый 299₽ / Премиум 599₽) с текущим статусом пользователя. Кнопки оплаты заглушены (tooltip «Оплата появится скоро»).
+View `subscription` в `users/views.py`. Показывает три тарифа (Бесплатный / Базовый 399₽/мес / Премиум 799₽/мес) с текущим статусом пользователя и датой окончания (`subscription_expires_at`). Кнопки «Купить» — реальные формы, ведут на `create_payment`.
 
 Текущий план определяется: `is_premium` → `'premium'`, `is_subscribed` → `'subscribed'`, иначе `'free'`.
 
@@ -321,9 +365,60 @@ View `subscription` в `users/views.py`. Показывает три тариф�
 
 | Текущий план | Бесплатный | Базовый | Премиум |
 |---|---|---|---|
-| `free` | Активен | Купить | Купить |
-| `subscribed` | Недоступно | Активен | Купить |
+| `free` | Активен | Купить — 399 ₽ | Купить — 799 ₽ |
+| `subscribed` | Недоступно | Активен | Купить — 799 ₽ |
 | `premium` | Недоступно | Недоступно | Активен |
+
+## Раздел Флэш-карточки
+
+Доступен только подписчикам (`is_subscribed` или `is_premium`). Не-подписчик редиректится на `/users/subscription/`.
+
+### Страница выбора (`/flashcards/`)
+
+View `flashcards`. Показывает список вакансий пользователя, у которых есть хотя бы одна завершённая сессия. Передаёт `vacancies` и `tag_labels` (словарь тег → читаемое название).
+
+### Тренировка (`/flashcards/train/`)
+
+View `flashcards_train`. Принимает GET-параметры:
+- `vacancy_id` — обязательный, ID `VacancyProfile`
+- `question_type` — `technical` / `behavioral` / `situational` (опционально)
+- `tag` — один из `_VALID_TAGS` (фильтр по тегу слабого места)
+- `level` — `common` / `junior` / `middle` / `pro` (опционально)
+- `weak_only=1` — только вопросы с `feedback.score < 4`
+
+Выбирает `Question` из завершённых сессий вакансии с заполненным `answer` и `feedback`, применяет фильтры, перемешивает через `random.shuffle`. Если после фильтрации нет карточек — `messages.warning` и редирект обратно.
+
+Каждая карточка (`cards` — список dict): `text`, `type_display`, `score`, `hint` (ideal_answer_hint). Отображается в шаблоне `flashcards_train.html` — flip-карточки без JS-фреймворков.
+
+Отдельной модели нет — используются существующие `Question` / `UserAnswer` / `Feedback`.
+
+## Система оплаты (YooKassa)
+
+### Флоу платежа
+
+1. `POST /users/payment/create/` (`create_payment` view) — проверяет план, вызывает `create_yookassa_payment()`, редиректит на `confirmation_url` YooKassa
+2. Пользователь оплачивает на сайте YooKassa
+3. `POST /users/payment/webhook/` (`payment_webhook` view, `@csrf_exempt`) — получает `payment.succeeded`, находит `Payment` по `yookassa_payment_id`, вызывает `activate_subscription()`
+4. `GET /users/payment/return/` (`payment_return` view) — показывает `payment_success.html` если подписка уже активна, иначе `payment_pending.html`
+
+### users/services.py
+
+- **`create_yookassa_payment(user, plan, return_url)`** — создаёт платёж в YooKassa через SDK, сохраняет `Payment(status=pending)` в БД, возвращает `(payment_db, confirmation_url)`. Использует `idempotency_key=uuid4()`.
+- **`activate_subscription(user, payment)`** — деактивирует старые подписки, создаёт `Subscription(expires_at=now+30d)`, обновляет `user.is_subscribed`, `user.is_premium`, `user.subscription_expires_at`, `user.interviews_limit_per_day`, отправляет письмо-подтверждение пользователю.
+- **`deactivate_user_subscription(user)`** — сбрасывает все поля подписки у пользователя, лимит → 1.
+- **`send_subscription_expired_email(user)`** — письмо об истечении с ссылкой на страницу подписки.
+
+### Идемпотентность webhook
+
+Перед активацией проверяется `payment.status == STATUS_SUCCEEDED` — повторный webhook не вызовет двойной активации.
+
+### Проверка IP webhook
+
+`_is_yookassa_ip(request)` в `users/views.py` — проверяет IP через `ipaddress` (стандартная библиотека). Покрывает официальный список ЮKassa: CIDR-диапазоны `185.71.76.0/27`, `185.71.77.0/27`, `77.75.153.0/25`, `77.75.154.128/25`, `2a02:5180::/32` и отдельные IP `77.75.156.11`, `77.75.156.35`. IP берётся из `X-Real-IP` (выставляется nginx), fallback — `REMOTE_ADDR`. При неверном IP возвращается `200 ok`.
+
+### Чеки для самозанятого
+
+Чек через «Мой налог» настраивается в ЛК YooKassa один раз (Настройки → «Мой налог»). После этого YooKassa автоматически регистрирует доход в ФНС и отправляет чек покупателю на email, который тот вводит на странице оплаты. Подробнее — `YOOKASSA.md`.
 
 ## Страница настроек (`/users/settings/`)
 
