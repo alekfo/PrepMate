@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Флэш-карточки — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page">
+  <h1>Флэш-карточки</h1>
+  <p class="subtitle">Повторяйте вопросы из прошлых интервью, чтобы закрепить ответы. Выберите вакансию и настройте режим — система покажет вопросы по одному, а вы сможете проверить себя перед тем, как увидеть подсказку.</p>
+
+  {% if vacancies %}
+    <form method="get" action="{% url 'interviews:flashcards_train' %}" class="form-card">
+
+      <label class="form-card-label">Вакансия</label>
+      <div class="fc-select-wrap">
+        <select name="vacancy_id" class="fc-select" required>
+          {% for vp in vacancies %}
+            <option value="{{ vp.id }}">{{ vp.job_title|default:"Без названия" }}{% if vp.company_name %} · {{ vp.company_name }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="fc-filters">
+
+        <div>
+          <label class="form-card-label">Уровень сессии</label>
+          <div class="fc-radio-group">
+            <label class="fc-radio-label"><input type="radio" name="level" value="" checked> Все уровни</label>
+            <label class="fc-radio-label"><input type="radio" name="level" value="common"> Без уровня</label>
+            <label class="fc-radio-label"><input type="radio" name="level" value="junior"> Junior</label>
+            <label class="fc-radio-label"><input type="radio" name="level" value="middle"> Middle</label>
+            <label class="fc-radio-label"><input type="radio" name="level" value="pro"> Pro</label>
+          </div>
+          <span class="helptext">Показать вопросы только из сессий определённого уровня сложности.</span>
+        </div>
+
+        <div>
+          <label class="form-card-label">Тип вопроса</label>
+          <div class="fc-radio-group">
+            <label class="fc-radio-label"><input type="radio" name="question_type" value="" checked> Все</label>
+            <label class="fc-radio-label"><input type="radio" name="question_type" value="technical"> Технические</label>
+            <label class="fc-radio-label"><input type="radio" name="question_type" value="behavioral"> Поведенческие</label>
+            <label class="fc-radio-label"><input type="radio" name="question_type" value="situational"> Ситуационные</label>
+          </div>
+          <span class="helptext">Сфокусируйтесь на нужной категории или тренируйте все типы сразу.</span>
+        </div>
+
+        <div>
+          <label class="form-card-label">Слабый навык</label>
+          <div class="fc-select-wrap">
+            <select name="tag" class="fc-select">
+              <option value="">Все навыки</option>
+              {% for tag, label in tag_labels.items %}
+                <option value="{{ tag }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <span class="helptext">Показать только вопросы, где AI отметил этот навык как слабое место.</span>
+        </div>
+
+        <label class="fc-checkbox-label">
+          <input type="checkbox" name="weak_only" value="1" class="fc-checkbox">
+          <span class="fc-checkbox-text">
+            <strong>Только слабые места</strong>
+            <span class="fc-checkbox-desc">Вопросы с баллом ниже 4 — те, которые нужно подтянуть в первую очередь.</span>
+          </span>
+        </label>
+
+      </div>
+
+      <button type="submit" class="btn">Начать тренировку</button>
+    </form>
+
+  {% else %}
+    <div class="paywall-card" style="margin-top: 40px;">
+      <h2>Нет завершённых интервью</h2>
+      <p>Пройдите хотя бы одно интервью, чтобы использовать флэш-карточки.</p>
+      <a href="{% url 'interviews:index' %}" class="btn" style="margin-top: 24px;">Начать интервью</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Тренировка — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page">
+  <a href="{% url 'interviews:flashcards' %}" class="back-link">← Назад к выбору</a>
+
+  <div class="fc-train-header">
+    <h1>{{ vacancy.job_title|default:"Тренировка" }}</h1>
+    {% if vacancy.company_name %}<p class="subtitle" style="margin-bottom: 0;">{{ vacancy.company_name }}</p>{% endif %}
+    <div class="fc-train-meta">
+      <span id="fcProgress">1 / {{ total }}</span>
+      {% if weak_only %}<span class="badge fc-meta-badge">Слабые места</span>{% endif %}
+      {% if level_label %}<span class="badge fc-meta-badge">{{ level_label }}</span>{% endif %}
+      {% if question_type_label %}<span class="badge fc-meta-badge">{{ question_type_label }}</span>{% endif %}
+      {% if tag_label %}<span class="badge fc-meta-badge">{{ tag_label }}</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="fc-progress-track"><div class="fc-progress-fill" id="fcProgressFill"></div></div>
+
+  <div class="fc-card" id="fcCard">
+    <span class="badge" id="fcTypeBadge"></span>
+    <p class="question-text" id="fcQuestion"></p>
+    <button class="btn btn-secondary fc-reveal-btn" id="fcRevealBtn" onclick="revealHint()">Показать подсказку</button>
+    <div class="fc-hint" id="fcHint">
+      <div class="fc-hint-divider"></div>
+      <p class="fc-hint-label">Идеальный ответ</p>
+      <p class="ideal-hint" id="fcHintText"></p>
+      <div class="fc-score-row">
+        <span class="fc-score-label">Ваш результат при ответе:</span>
+        <span class="score-pill" id="fcScore"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="fc-nav" id="fcNav">
+    <button class="btn" id="fcNextBtn" onclick="nextCard()">Следующий вопрос</button>
+  </div>
+
+  <div class="fc-done" id="fcDone">
+    <p class="fc-done-icon">✓</p>
+    <p class="fc-done-title">Тренировка завершена</p>
+    <p class="fc-done-text">Вы прошли все {{ total }} карточки в этой сессии.</p>
+    <div class="fc-done-actions">
+      <button class="btn" onclick="restartCards()">Повторить снова</button>
+      <a href="{% url 'interviews:flashcards' %}" class="btn btn-secondary">Выбрать другие параметры</a>
+    </div>
+  </div>
+</div>
+
+{{ cards|json_script:"flashcardsData" }}
+
+<script>
+  (function () {
+    var cards = JSON.parse(document.getElementById('flashcardsData').textContent);
+    var idx = 0;
+
+    function renderCard(i) {
+      var c = cards[i];
+      document.getElementById('fcQuestion').textContent = c.text;
+      document.getElementById('fcTypeBadge').textContent = c.type_display;
+      document.getElementById('fcHintText').textContent = c.hint;
+      document.getElementById('fcScore').textContent = c.score + ' / 10';
+      document.getElementById('fcHint').classList.remove('fc-hint--visible');
+      document.getElementById('fcRevealBtn').style.display = 'inline-flex';
+      document.getElementById('fcNav').style.display = 'none';
+      document.getElementById('fcProgress').textContent = (i + 1) + ' / ' + cards.length;
+      document.getElementById('fcProgressFill').style.width = Math.round(i / cards.length * 100) + '%';
+    }
+
+    window.revealHint = function () {
+      document.getElementById('fcHint').classList.add('fc-hint--visible');
+      document.getElementById('fcRevealBtn').style.display = 'none';
+      document.getElementById('fcNextBtn').textContent = idx === cards.length - 1 ? 'Завершить' : 'Следующий вопрос';
+      document.getElementById('fcNav').style.display = 'block';
+    };
+
+    window.nextCard = function () {
+      idx++;
+      if (idx >= cards.length) {
+        document.getElementById('fcCard').style.display = 'none';
+        document.getElementById('fcNav').style.display = 'none';
+        document.getElementById('fcDone').classList.add('fc-done--visible');
+        document.getElementById('fcProgressFill').style.width = '100%';
+        document.getElementById('fcProgress').textContent = cards.length + ' / ' + cards.length;
+      } else {
+        renderCard(idx);
+      }
+    };
+
+    window.restartCards = function () {
+      idx = 0;
+      document.getElementById('fcCard').style.display = 'block';
+      document.getElementById('fcDone').classList.remove('fc-done--visible');
+      renderCard(0);
+    };
+
+    renderCard(0);
+  })();
+</script>
+{% endblock %}
