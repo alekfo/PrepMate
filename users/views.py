@@ -1,3 +1,5 @@
+import ipaddress
+import json
 import logging
 
 from django.shortcuts import render, redirect
@@ -7,7 +9,33 @@ from django.contrib import messages
 from django.core import signing
 from django.core.mail import send_mail
 from django.conf import settings
+from django.http import HttpResponse, HttpResponseBadRequest
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
 from .forms import RegisterForm, ContactForm
+from .models import Payment
+
+_YOOKASSA_NETWORKS = [
+    ipaddress.ip_network('185.71.76.0/27'),
+    ipaddress.ip_network('185.71.77.0/27'),
+    ipaddress.ip_network('77.75.153.0/25'),
+    ipaddress.ip_network('77.75.154.128/25'),
+    ipaddress.ip_network('2a02:5180::/32'),
+]
+_YOOKASSA_SINGLE_IPS = {
+    ipaddress.ip_address('77.75.156.11'),
+    ipaddress.ip_address('77.75.156.35'),
+}
+
+
+def _is_yookassa_ip(request):
+    ip_str = request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR', '')
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    return ip in _YOOKASSA_SINGLE_IPS or any(ip in net for net in _YOOKASSA_NETWORKS)
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +151,92 @@ def subscription(request):
         current_plan = 'subscribed'
     else:
         current_plan = 'free'
-    return render(request, 'users/subscription.html', {'current_plan': current_plan})
+    return render(request, 'users/subscription.html', {
+        'current_plan': current_plan,
+        'subscription_expires_at': u.subscription_expires_at,
+    })
+
+
+@login_required
+@require_POST
+def create_payment(request):
+    from .services import create_yookassa_payment
+
+    plan = request.POST.get('plan')
+    if plan not in ('subscribed', 'premium'):
+        return HttpResponseBadRequest('Неверный план.')
+
+    # Не даём купить более низкий план
+    u = request.user
+    if u.is_premium:
+        messages.error(request, 'У вас уже активен Премиум план.')
+        return redirect('users:subscription')
+    if u.is_subscribed and plan == 'subscribed':
+        messages.error(request, 'У вас уже активна базовая подписка.')
+        return redirect('users:subscription')
+
+    return_url = request.build_absolute_uri('/users/payment/return/')
+
+    try:
+        _payment_db, confirmation_url = create_yookassa_payment(u, plan, return_url)
+    except Exception as e:
+        logger.error("YooKassa payment creation failed: user=%s plan=%s error=%s", u.username, plan, e)
+        messages.error(request, 'Не удалось создать платёж. Попробуйте позже.')
+        return redirect('users:subscription')
+
+    return redirect(confirmation_url)
+
+
+@csrf_exempt
+@require_POST
+def payment_webhook(request):
+    from .services import activate_subscription
+
+    if not _is_yookassa_ip(request):
+        logger.warning("Webhook from unknown IP: %s", request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR'))
+        return HttpResponse('ok')  # возвращаем 200 чтобы не раскрывать информацию
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return HttpResponseBadRequest('Invalid JSON')
+
+    event = data.get('event')
+    obj = data.get('object', {})
+    yk_payment_id = obj.get('id')
+    status = obj.get('status')
+
+    logger.info("YooKassa webhook: event=%s yk_id=%s status=%s", event, yk_payment_id, status)
+
+    if event != 'payment.succeeded' or status != 'succeeded':
+        return HttpResponse('ok')
+
+    try:
+        payment = Payment.objects.select_related('user').get(yookassa_payment_id=yk_payment_id)
+    except Payment.DoesNotExist:
+        logger.warning("Webhook: payment not found yk_id=%s", yk_payment_id)
+        return HttpResponse('ok')
+
+    if payment.status == Payment.STATUS_SUCCEEDED:
+        # Уже обработан (идемпотентность)
+        return HttpResponse('ok')
+
+    payment.status = Payment.STATUS_SUCCEEDED
+    payment.save(update_fields=['status'])
+
+    activate_subscription(payment.user, payment)
+
+    return HttpResponse('ok')
+
+
+@login_required
+def payment_return(request):
+    """Страница, на которую YooKassa редиректит после оплаты."""
+    u = request.user
+    # Проверяем, есть ли у пользователя активная подписка (webhook мог уже сработать)
+    if u.is_subscribed or u.is_premium:
+        return render(request, 'users/payment_success.html')
+    return render(request, 'users/payment_pending.html')
 
 
 def privacy_policy(request):

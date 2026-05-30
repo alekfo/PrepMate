@@ -66,6 +66,9 @@ EMAIL_USE_SSL=True
 EMAIL_HOST_USER=      # твой яндекс-адрес
 EMAIL_HOST_PASSWORD=  # пароль приложения (не пароль аккаунта)
 SUPPORT_EMAIL=        # куда приходят уведомления
+
+YOOKASSA_SHOP_ID=     # shopId из ЛК ЮKassa
+YOOKASSA_SECRET_KEY=  # Секретный ключ из ЛК ЮKassa → Настройки → Ключи API
 ```
 
 Сохранить: `Ctrl+O`, `Enter`, `Ctrl+X`.
@@ -91,7 +94,37 @@ chmod +x init-ssl.sh entrypoint.sh
 
 Занимает ~2 минуты. В конце выведет `Done! https://prepstats.pro`.
 
-### 7. Настроить автообновление сертификата (один раз)
+### 7. Настроить ежедневную деактивацию истёкших подписок (один раз)
+
+Crontab — это планировщик задач Linux. Он хранит список команд с расписанием и запускает их автоматически, без участия пользователя. Каждая строка — одно задание в формате: `минуты часы день месяц день_недели команда`.
+
+```bash
+crontab -e
+```
+
+Если спросит редактор — выбери `1` (nano). Добавь строку в конец файла:
+
+```
+0 3 * * * cd /home/alek_fo/PrepMate && docker compose exec -T prepmate-web-1 python manage.py deactivate_expired_subscriptions >> /home/alek_fo/logs/subscriptions_cron.log 2>&1
+```
+
+Сохрани: `Ctrl+O` → Enter → `Ctrl+X`.
+
+Что делает эта строка: `0 3 * * *` — каждый день в 3:00 ночи. Заходит в Docker-контейнер `prepmate-web-1` и запускает команду, которая ищет подписки с истёкшей датой, деактивирует их и отправляет пользователям письмо. Результат пишется в лог `/home/alek_fo/logs/subscriptions_cron.log`.
+
+Проверить что добавилось:
+
+```bash
+crontab -l
+```
+
+Проверить вручную (без ожидания 3:00):
+
+```bash
+docker compose exec prepmate-web-1 python manage.py deactivate_expired_subscriptions
+```
+
+### 8. Настроить автообновление сертификата (один раз)
 
 ```bash
 (crontab -l 2>/dev/null; echo "0 3 1 * * cd ~/PrepMate && docker compose stop nginx && certbot renew --quiet && docker compose start nginx") | crontab -
@@ -103,7 +136,7 @@ chmod +x init-ssl.sh entrypoint.sh
 crontab -l
 ```
 
-### 8. Проверить
+### 9. Проверить
 
 ```bash
 docker compose ps
@@ -183,6 +216,7 @@ docker compose start nginx
                             ↘ /static/ → папка staticfiles
 nginx:80 → редирект на 443
 /etc/letsencrypt → монтируется в nginx read-only
-crontab → обновление сертификата 1 раз в месяц
+crontab 03:00 ежедневно → deactivate_expired_subscriptions (письмо + сброс доступа)
+crontab 03:00 1-го числа → обновление SSL-сертификата
 db → PostgreSQL (данные в docker volume)
 ```

@@ -9,6 +9,11 @@
 
   <h1>Подписка</h1>
   <p class="subtitle">Выберите план, который подходит вам.</p>
+  {% if subscription_expires_at %}
+  <p style="color:var(--text-muted); margin-bottom:1.5rem;">
+    Подписка активна до <strong>{{ subscription_expires_at|date:"d.m.Y" }}</strong>.
+  </p>
+  {% endif %}
 
   <div class="plans-grid">
 
@@ -55,10 +60,11 @@
       {% elif current_plan == 'premium' %}
         <span class="btn btn-secondary" style="width:100%; justify-content:center; cursor:default; opacity:0.45; pointer-events:none;">Недоступно</span>
       {% else %}
-        <div class="btn-blocked-wrap" style="width:100%; margin-top:0;">
-          <span class="btn" style="width:100%; justify-content:center; pointer-events:none;">Купить</span>
-          <span class="btn-tooltip">Оплата появится скоро</span>
-        </div>
+        <form method="post" action="{% url 'users:create_payment' %}">
+          {% csrf_token %}
+          <input type="hidden" name="plan" value="subscribed">
+          <button type="submit" class="btn" style="width:100%;">Купить — 399 ₽</button>
+        </form>
       {% endif %}
     </div>
 
@@ -83,10 +89,11 @@
       {% if current_plan == 'premium' %}
         <span class="btn btn-secondary" style="width:100%; justify-content:center; cursor:default; opacity:0.45; pointer-events:none;">Активен</span>
       {% else %}
-        <div class="btn-blocked-wrap" style="width:100%; margin-top:0;">
-          <span class="btn" style="width:100%; justify-content:center; pointer-events:none;">Купить</span>
-          <span class="btn-tooltip">Оплата появится скоро</span>
-        </div>
+        <form method="post" action="{% url 'users:create_payment' %}">
+          {% csrf_token %}
+          <input type="hidden" name="plan" value="premium">
+          <button type="submit" class="btn" style="width:100%;">Купить — 799 ₽</button>
+        </form>
       {% endif %}
     </div>
 
