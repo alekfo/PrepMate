@@ -149,6 +149,9 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'main',
         },
+        'null': {
+            'class': 'logging.NullHandler',
+        },
     },
     'loggers': {
         'interviews': {
@@ -167,7 +170,10 @@ LOGGING = {
             'propagate': False,
         },
         'django.security.DisallowedHost': {
-            'handlers': [],
+            # NullHandler, не handlers: [] — пустой список handlers всё равно
+            # печатает запись через logging.lastResort (stderr), если её
+            # никто не обработал. NullHandler реально поглощает запись.
+            'handlers': ['null'],
             'propagate': False,
         },
     },
