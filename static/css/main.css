@@ -850,6 +850,16 @@ input:focus {
   color: var(--text);
 }
 
+/* ── Honeypot (anti-bot) field ── */
+.hp-field {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
 /* ── Privacy policy checkbox ── */
 .privacy-policy-group {
   display: flex;

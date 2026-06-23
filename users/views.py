@@ -7,6 +7,7 @@ from django.contrib.auth import login, get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core import signing
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseBadRequest
@@ -76,8 +77,20 @@ def _notify_admin_new_user(user):
         pass
 
 
+_REGISTER_RATE_LIMIT = 5  # попыток регистрации с одного IP за час
+
+
 def register(request):
     if request.method == 'POST':
+        ip = request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR', '')
+        rate_key = f'register_attempts_{ip}'
+        attempts = cache.get(rate_key, 0)
+        if attempts >= _REGISTER_RATE_LIMIT:
+            logger.warning("Registration rate limit hit for ip=%s", ip)
+            messages.error(request, 'Слишком много попыток регистрации с вашего адреса. Попробуйте позже.')
+            return render(request, 'users/register.html', {'form': RegisterForm()})
+        cache.set(rate_key, attempts + 1, timeout=3600)
+
         form = RegisterForm(request.POST)
         if form.is_valid():
             user = form.save()
