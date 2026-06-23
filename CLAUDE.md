@@ -295,7 +295,7 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 В `settings.py` настроен structured logging (формат `{asctime} {levelname} {name}: {message}`):
 - `interviews` и `users` логгеры: `DEBUG` в dev, `INFO` в prod
 - `django.request`: только `WARNING` и выше
-- `django.security.DisallowedHost`: подавлен (боты с чужим Host не засоряют логи — nginx их отбивает на уровне `return 444`)
+- `django.security.DisallowedHost`: подавлен через `NullHandler` (**важно**: `'handlers': []` не глушит логгер — при нуле обработавших запись хендлеров Python сбрасывает её в `logging.lastResort`, то есть всё равно печатает в stderr с traceback'ом; нужен явный `NullHandler`, который реально поглощает запись)
 
 ## Навигация
 
@@ -434,6 +434,12 @@ View `flashcards_train`. Принимает GET-параметры:
 - Поле `email` (required, unique — проверка в `clean_email`)
 - Поле `privacy_policy` (BooleanField) — чекбокс согласия с политикой и офертой; кнопка «Зарегистрироваться» заблокирована JS до отметки чекбокса (проверка начального состояния при загрузке страницы)
 - После регистрации: автоматически отправляется письмо подтверждения email
+
+### Защита от ботов
+
+- **Honeypot**: поле `website` в `RegisterForm` — спрятано в шаблоне через CSS-класс `.hp-field` (абсолютный off-screen, не `display:none`/`visibility:hidden` — некоторые боты такие способы скрытия распознают и пропускают поле). `clean_website()` отклоняет форму без объяснения причины, если поле заполнено.
+- **Одноразовые почты**: `clean_email` дополнительно проверяет домен против `_DISPOSABLE_EMAIL_DOMAINS` (mailinator, guerrillamail, 10minutemail и т.п.) в `users/forms.py`.
+- **Rate-limit**: в `register` view — не более 5 попыток регистрации в час с одного IP, счётчик в `cache` (`FileBasedCache`, ключ `register_attempts_<ip>`, TTL 3600s). IP берётся из `X-Real-IP` (nginx) с fallback на `REMOTE_ADDR`.
 
 ## Важные детали
 

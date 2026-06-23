@@ -26,6 +26,12 @@
 - [x] **Безопасность webhook** — проверка IP через `ipaddress` (CIDR + отдельные IP)
 - [x] **FileBasedCache** — межпроцессный кэш вместо LocMemCache (работает при 2 воркерах)
 
+- [x] **Защита регистрации от ботов**
+  - Honeypot-поле `website` в `RegisterForm` — невидимое для людей (CSS off-screen, не `display:none`), боты заполняют все input'ы автоматически
+  - Блок одноразовых почтовых доменов (`mailinator.com`, `guerrillamail.com` и др.) в `clean_email`
+  - Rate-limit на `register`: 5 попыток в час с одного IP через `cache` (FileBasedCache)
+  - Попутный фикс: `django.security.DisallowedHost` логгер с `handlers: []` не подавлял вывод, а сбрасывал записи в `logging.lastResort` (stderr) — заменено на `NullHandler`
+
 ---
 
 ## Функциональность — следующие этапы
