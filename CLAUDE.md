@@ -17,9 +17,10 @@
 ```
 prep_mate/        — настройки Django (settings.py, urls.py, wsgi/asgi)
 interviews/       — основное приложение
-  models.py       — InterviewSession, Question, UserAnswer, Feedback
-  views.py        — index, start, question, resume, history, report
-  services.py     — generate_questions(), evaluate_answer() (Claude API через прокси)
+  models.py       — InterviewSession, Question, UserAnswer, Feedback, VacancyProfile, VacancyAdvice
+  views.py        — index, start, question, resume, history, report, statistics_overview,
+                    statistics_vacancy, flashcards, flashcards_train
+  services.py     — generate_questions(), evaluate_answer(), generate_vacancy_advice() (Claude API через прокси)
   urls.py         — маршруты приложения
   admin.py        — регистрация моделей
 users/            — кастомная модель пользователя + auth-страницы + платежи
@@ -117,15 +118,6 @@ OneToOne → UserAnswer. Хранит: score (1–10), strengths (JSON), improve
 
 Теги выбираются из фиксированного белого списка `_VALID_TAGS` в `services.py` (depth, examples, structure, communication, confidence, relevance, experience, proactivity). Теги не из списка отбрасываются после парсинга.
 
-### interviews.SessionAdvice
-OneToOne → InterviewSession. Генерируется лениво при первом визите подписчика на страницу статистики вакансии.
-| Поле | Тип |
-|---|---|
-| `summary` | TextField |
-| `advice` | JSONField (list) |
-| `focus_topics` | JSONField (list) |
-| `generated_at` | DateTimeField (auto_now_add) |
-
 ### interviews.VacancyAdvice
 OneToOne → VacancyProfile. Агрегированный AI-анализ прогресса по всем сессиям вакансии.
 | Поле | Тип |
@@ -139,7 +131,9 @@ OneToOne → VacancyProfile. Агрегированный AI-анализ про
 | `generated_at` | DateTimeField (auto_now_add) |
 | `session_count_at_generation` | PositiveIntegerField |
 
-Инвалидация кэша: при каждом визите сравнивается `session_count_at_generation` с текущим числом завершённых сессий. Если не совпадает — регенерируется.
+Инвалидация: при каждом визите сравнивается `session_count_at_generation` с текущим числом завершённых сессий. Если не совпадает — регенерируется.
+
+**Важно:** `generated_at` имеет `auto_now_add=True` (устанавливается только при INSERT). При обновлении существующей записи `views.py` вручную присваивает `vacancy_advice.generated_at = timezone.now()` перед `save()` — иначе дата оставалась бы датой первого создания.
 
 ## URL-маршруты
 
@@ -186,6 +180,7 @@ OneToOne → VacancyProfile. Агрегированный AI-анализ про
 - Вызывается повторно через кнопку «Подтвердить» в настройках (`/users/send-confirmation/`)
 - Токен генерируется через `django.core.signing.dumps({'uid': pk}, salt='email-confirm')`, действителен 24 часа
 - Подтверждение: `confirm_email` view верифицирует токен и выставляет `user.email_confirmed = True`
+- Flash-сообщение после отправки содержит подсказку «Если не видите — проверьте папку «Спам»»
 
 **Уведомление админу при регистрации** — `_notify_admin_new_user(user)`, `fail_silently=True`.
 
@@ -211,7 +206,7 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 
 ## Claude API — логика вызовов
 
-В `interviews/services.py` четыре публичных метода. Claude вызывается **не напрямую через Anthropic SDK**, а через HTTP-прокси: `requests.post(settings.CLAUDE_API_SERVICE_URL, json={"prompt": ...}, headers={"X-API-Key": settings.CLAUDE_API_SERVICE_KEY}, timeout=60)`. Прокси возвращает `{"response": "..."}`.
+В `interviews/services.py` три публичных метода. Claude вызывается **не напрямую через Anthropic SDK**, а через HTTP-прокси: `requests.post(settings.CLAUDE_API_SERVICE_URL, json={"prompt": ...}, headers={"X-API-Key": settings.CLAUDE_API_SERVICE_KEY}, timeout=60)`. Прокси возвращает `{"response": "..."}`.
 
 Адрес прокси задаётся через `CLAUDE_API_SERVICE_URL`, ключ авторизации — через `CLAUDE_API_SERVICE_KEY` (env `SERVICE_API_KEY`).
 
@@ -227,11 +222,9 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 **`evaluate_answer(question_text, answer_text, vacancy_context)`** — 1 запрос после каждого ответа.
 Возвращает `{"score": 1-10, "strengths": [...], "improvements": [...], "ideal_answer_hint": ..., "weakness_tags": [...], "strength_tags": [...]}`.
 
-**`generate_session_advice(session)`** — 1 запрос при первом визите подписчика на статистику вакансии (для каждой сессии без `SessionAdvice`). Передаёт уровень сессии в промпт с инструкцией оценивать результаты относительно уровня подготовки, а не как финальное собеседование. Тон промпта — мотивирующий коуч. Возвращает `{"summary": ..., "advice": [...], "focus_topics": [...]}`.
+**`generate_vacancy_advice(vacancy_profile)`** — 1 запрос при генерации/обновлении `VacancyAdvice`. Берёт данные напрямую из `Question → Feedback` (не из промежуточных summary). Передаёт историю всех сессий (дата, балл, текст вопроса, первое замечание), хронические и исправленные теги, **уровни подготовки** (`Counter` по `session.get_level_display()`). Вердикт запрашивается в формате «что работает + что блокирует + реалистичный срок». Возвращает `{"overall_progress": ..., "chronic_issues": [...], "improvements": [...], "next_steps": [...], "focus_topics": [...], "verdict": ...}`.
 
-**`generate_vacancy_advice(vacancy_profile)`** — 1 запрос при генерации/обновлении `VacancyAdvice`. Передаёт развёрнутую историю всех сессий, хронические и исправленные теги, а также **уровни подготовки** (`Counter` по `session.get_level_display()`). Промпт явно указывает оценивать прогресс относительно этих уровней. Вердикт запрашивается в формате «что работает + что блокирует + реалистичный срок» — без бинарного «готов/не готов». Возвращает `{"overall_progress": ..., "chronic_issues": [...], "improvements": [...], "next_steps": [...], "focus_topics": [...], "verdict": ...}`.
-
-Итого **9 запросов** на одну полную сессию (1 + 8). Запросы статистики — дополнительно, только для подписчиков. Ответ парсится через `_parse_json()`, которая снимает markdown-обёртку ` ```json ``` `.
+Итого **9 запросов** на одну полную сессию (1 + 8). `VacancyAdvice` — отдельный запрос при первом визите на страницу вакансии или при появлении новой сессии, только для подписчиков. Ответ парсится через `_parse_json()`, которая снимает markdown-обёртку ` ```json ``` `.
 
 ## Переменные окружения (.env)
 
@@ -301,9 +294,11 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 
 **Незалогиненный пользователь** (навбар): бренд → О проекте · Войти · Регистрация
 **Залогиненный пользователь** (навбар): бренд → username · Выйти · бургер-меню `≡`
-Бургер-меню dropdown: История · Статистика · Настройки · О проекте
+Бургер-меню dropdown: История · Менторство от AI · Флэш-карточки · Настройки · О проекте
 
-При добавлении нового раздела — добавить `<a>` или `<span>` в `#navDropdown` в `base.html`.
+`.nav-username` отображается на мобильных устройствах с `max-width: 80px; overflow: hidden; text-overflow: ellipsis` — длинные логины обрезаются с `…`.
+
+При добавлении нового раздела — добавить `<a>` в `#navDropdown` в `base.html`.
 
 ## Страница index
 
@@ -330,9 +325,9 @@ View `statistics_overview`. Итерирует все `VacancyProfile` поль�
 
 View `statistics_vacancy`. Доступ: `vacancy_profile.user == request.user`.
 
-**Ленивая генерация советов** (при каждом визите):
-1. Для каждой завершённой сессии без `SessionAdvice` — вызывается `generate_session_advice()`, создаётся запись
-2. Если `VacancyAdvice` отсутствует или `session_count_at_generation < текущее_кол-во_сессий` — вызывается `generate_vacancy_advice()`, создаётся/обновляется запись
+**Ленивая генерация VacancyAdvice** (при каждом визите):
+- Если `VacancyAdvice` отсутствует или `session_count_at_generation < текущее_кол-во_сессий` — вызывается `generate_vacancy_advice()`, создаётся/обновляется запись
+- `SessionAdvice` не существует — удалено как нефункциональное (данные не отображались в UI, токены тратились впустую)
 
 **Кэш** (`django.core.cache`): используется `FileBasedCache` (`/tmp/django_cache_prepstats`) — межпроцессный, работает при нескольких gunicorn-воркерах. LocMemCache не подходит, так как каждый воркер видит только свою память.
 
@@ -425,7 +420,7 @@ View `flashcards_train`. Принимает GET-параметры:
 Секции:
 - **Аккаунт**: email + индикатор подтверждения (зелёный/жёлтый бейдж), кнопка «Подтвердить»; смена пароля
 - **Язык интерфейса**: радиокнопки RU/EN (disabled, «Скоро»)
-- **Подписка**: текущий план из полей модели + кнопка «Управлять» (disabled, «Скоро»)
+- **Подписка**: текущий план + дата истечения (`subscription_expires_at|date:"d.m.Y"`) + кнопка «Управлять» (disabled, «Скоро»)
 - **Документы**: ссылки на политику конфиденциальности и публичную оферту
 
 ## Регистрация

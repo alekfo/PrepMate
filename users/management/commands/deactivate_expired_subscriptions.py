@@ -9,6 +9,11 @@ class Command(BaseCommand):
     help = 'Деактивирует истёкшие подписки и уведомляет пользователей по email'
 
     def handle(self, *args, **options):
+        """Деактивирует все истёкшие подписки и уведомляет пользователей по email.
+
+        Идемпотентен. Запускается cron ежедневно в 3:00 и при каждом деплое через entrypoint.sh.
+        Если у пользователя есть другая активная подписка — поля User не сбрасываются.
+        """
         now = timezone.now()
         expired = (
             Subscription.objects

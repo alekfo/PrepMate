@@ -41,11 +41,13 @@ class RegisterForm(UserCreationForm):
         fields = ('username', 'email', 'password1', 'password2')
 
     def clean_website(self):
+        """Honeypot-валидация: отклоняет форму если невидимое поле заполнено (признак бота)."""
         if self.cleaned_data.get('website'):
             raise forms.ValidationError('Ошибка валидации формы.')
         return ''
 
     def clean_email(self):
+        """Проверяет уникальность email и отклоняет домены одноразовых почт."""
         email = self.cleaned_data.get('email')
         domain = email.rsplit('@', 1)[-1].lower() if email and '@' in email else ''
         if domain in _DISPOSABLE_EMAIL_DOMAINS:
