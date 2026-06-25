@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import InterviewSession, Question, UserAnswer, Feedback, VacancyProfile, SessionAdvice, VacancyAdvice
+from .models import InterviewSession, Question, UserAnswer, Feedback, VacancyProfile, VacancyAdvice
 
 
 class QuestionInline(admin.TabularInline):
@@ -32,11 +32,6 @@ class VacancyProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'job_title', 'company_name', 'created_at')
     search_fields = ('user__username', 'job_title', 'company_name')
 
-
-@admin.register(SessionAdvice)
-class SessionAdviceAdmin(admin.ModelAdmin):
-    list_display = ('session', 'generated_at')
-    readonly_fields = ('generated_at',)
 
 
 @admin.register(VacancyAdvice)
