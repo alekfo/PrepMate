@@ -11,6 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 def _ask(prompt: str, _retries: int = 2) -> str:
+    """Отправляет промпт в Claude через HTTP-прокси. До 3 попыток с экспоненциальной паузой.
+
+    Повторяет запрос при сетевых ошибках и при пустом ответе.
+    Бросает RuntimeError если все попытки исчерпаны.
+    """
     for attempt in range(_retries + 1):
         t0 = time.monotonic()
         try:
@@ -40,6 +45,7 @@ def _ask(prompt: str, _retries: int = 2) -> str:
 
 
 def _parse_json(text: str) -> dict | list:
+    """Парсит JSON из ответа Claude, снимая markdown-обёртку ```json``` если она есть."""
     match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
     return json.loads(match.group(1) if match else text.strip())
 
@@ -70,6 +76,10 @@ _LEVEL_INSTRUCTIONS = {
 
 
 def generate_questions(vacancy_text: str, level: str = 'common') -> list[dict]:
+    """Генерирует 8 вопросов для интервью на основе текста вакансии и уровня кандидата.
+
+    Возвращает dict с ключами job_title, company_name и questions (список {text, type}).
+    """
     logger.info("Generating questions for vacancy (%d chars), level=%s", len(vacancy_text), level)
     level_instruction = _LEVEL_INSTRUCTIONS.get(level, '')
     level_line = f'\n{level_instruction}\n' if level_instruction else ''
@@ -100,6 +110,11 @@ def generate_questions(vacancy_text: str, level: str = 'common') -> list[dict]:
 
 
 def evaluate_answer(question_text: str, answer_text: str, vacancy_context: str) -> dict:
+    """Оценивает ответ кандидата на вопрос интервью.
+
+    Возвращает dict: score (1–10), strengths, improvements, ideal_answer_hint,
+    weakness_tags и strength_tags (только теги из _VALID_TAGS).
+    """
     logger.debug("Evaluating answer (%d chars) for question: %.60s…", len(answer_text), question_text)
     text = _ask(f"""Оцени ответ кандидата на вопрос интервью.
 
@@ -130,60 +145,15 @@ def evaluate_answer(question_text: str, answer_text: str, vacancy_context: str) 
     return result
 
 
-def generate_session_advice(session) -> dict:
-    logger.info("Generating session advice for session=%d", session.id)
-
-    feedbacks = []
-    for question in session.questions.prefetch_related('answer__feedback').all():
-        answer = getattr(question, 'answer', None)
-        feedback = getattr(answer, 'feedback', None) if answer else None
-        if feedback:
-            feedbacks.append({
-                'question': question.text,
-                'score': feedback.score,
-                'strengths': feedback.strengths,
-                'improvements': feedback.improvements,
-                'weakness_tags': feedback.weakness_tags,
-            })
-
-    questions_block = '\n'.join(
-        f'  {i+1}. [{f["score"]}/10] {f["question"]}\n'
-        f'     Слабые стороны: {", ".join(f["weakness_tags"]) or "—"}\n'
-        f'     Улучшить: {"; ".join(f["improvements"][:2])}'
-        for i, f in enumerate(feedbacks)
-    )
-
-    text = _ask(f"""Ты мотивирующий карьерный коуч. Проанализируй результаты прохождения mock-интервью и дай персональные рекомендации.
-
-Вакансия: {session.job_title or "не указана"}{f", {session.company_name}" if session.company_name else ""}
-Уровень подготовки: {session.get_level_display()}
-Контекст: {session.vacancy_text[:300]}
-
-Важно: кандидат проходит mock-интервью на уровне «{session.get_level_display()}». Оценивай результаты относительно этого уровня подготовки — не как итоговое собеседование на вакансию.
-
-Общий балл: {session.overall_score:.1f}/10
-Вопросы и оценки:
-{questions_block}
-
-Ответь строго в формате JSON:
-{{
-  "summary": "Общий вывод по сессии — 2-3 предложения. Отметь что получилось хорошо и что стоит улучшить. Тон: поддерживающий, конкретный.",
-  "advice": [
-    "Конкретный совет 1, привязанный к слабым местам этой сессии",
-    "Конкретный совет 2",
-    "Конкретный совет 3"
-  ],
-  "focus_topics": ["Тема для изучения 1", "Тема для изучения 2"]
-}}
-
-focus_topics — конкретные темы или навыки для подготовки, привязанные к домену вакансии.""")
-
-    result = _parse_json(text)
-    logger.info("Session advice generated for session=%d", session.id)
-    return result
-
 
 def generate_vacancy_advice(vacancy_profile) -> dict:
+    """Генерирует агрегированный AI-анализ прогресса по всем сессиям вакансии.
+
+    Передаёт в промпт историю всех сессий (баллы, вопросы, первое замечание),
+    хронические и исправленные теги слабых мест, уровни подготовки.
+    Возвращает dict: overall_progress, chronic_issues, improvements,
+    next_steps, focus_topics, verdict.
+    """
     logger.info("Generating vacancy advice for vacancy_profile=%d", vacancy_profile.id)
 
     sessions = list(
@@ -273,6 +243,7 @@ focus_topics — только темы, в которых кандидат ре�
 
 
 def _top_tags(tags: list[str], n: int = 2) -> list[str]:
+    """Возвращает n самых частых тегов из плоского списка."""
     counts: dict[str, int] = {}
     for t in tags:
         counts[t] = counts.get(t, 0) + 1
@@ -280,7 +251,10 @@ def _top_tags(tags: list[str], n: int = 2) -> list[str]:
 
 
 def _chronic_tags(sessions: list, threshold: float = 0.5) -> list[tuple[str, int]]:
-    """Теги, встречающиеся в >= threshold доли сессий."""
+    """Возвращает теги слабых мест, встречающиеся в >= threshold доли сессий (по умолчанию 50%).
+
+    Результат: список кортежей (tag, count), отсортированных по убыванию.
+    """
     total = len(sessions)
     if not total:
         return []
@@ -298,7 +272,10 @@ def _chronic_tags(sessions: list, threshold: float = 0.5) -> list[tuple[str, int
 
 
 def _fixed_tags(sessions: list, last_n: int = 3) -> list[str]:
-    """Теги, которые были раньше, но отсутствуют в последних last_n сессиях."""
+    """Возвращает теги, которые встречались в ранних сессиях, но исчезли в последних last_n.
+
+    Используется для определения исправленных слабых мест кандидата.
+    """
     if len(sessions) <= last_n:
         return []
     early = sessions[:-last_n]

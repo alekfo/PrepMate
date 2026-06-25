@@ -6,6 +6,11 @@ class Command(BaseCommand):
     help = 'Backfill VacancyProfile for sessions created before migration 0004'
 
     def handle(self, *args, **options):
+        """Привязывает InterviewSession без vacancy_profile к существующему или новому VacancyProfile.
+
+        Идемпотентен: безопасно запускать при каждом деплое через entrypoint.sh.
+        Нужен для сессий, созданных до миграции 0004.
+        """
         sessions = InterviewSession.objects.filter(
             vacancy_profile__isnull=True
         ).select_related('user').order_by('created_at')
