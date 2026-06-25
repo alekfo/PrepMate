@@ -201,7 +201,7 @@ def history(request):
     sessions = InterviewSession.objects.filter(user=request.user).annotate(
         total=Count('questions'),
         answered=Count('questions', filter=Q(questions__answer__isnull=False)),
-    )
+    ).order_by('-created_at')
     return render(request, 'interviews/history.html', {'sessions': sessions})
 
 
@@ -336,6 +336,7 @@ def statistics_vacancy(request, vacancy_id):
                 else:
                     for k, v in fields.items():
                         setattr(vacancy_advice, k, v)
+                    vacancy_advice.generated_at = timezone.now()
                     vacancy_advice.save()
                 cache.delete(cooldown_key)
             except Exception as e:
