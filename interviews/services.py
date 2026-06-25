@@ -23,7 +23,7 @@ def _ask(prompt: str, _retries: int = 2) -> str:
                 settings.CLAUDE_API_SERVICE_URL,
                 json={"prompt": prompt},
                 headers={"X-API-Key": settings.CLAUDE_API_SERVICE_KEY},
-                timeout=60,
+                timeout=90,
             )
             response.raise_for_status()
         except requests.RequestException as e:
