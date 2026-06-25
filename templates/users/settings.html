@@ -68,9 +68,9 @@
         <span class="settings-item-label">Текущий план</span>
         <span class="settings-item-desc">
           {% if user.is_premium %}
-            <span class="plan-badge plan-badge--premium">Премиум</span> · 5 интервью в день
+            <span class="plan-badge plan-badge--premium">Премиум</span> · истекает {{user.subscription_expires_at|date:"d.m.Y"}}
           {% elif user.is_subscribed %}
-            <span class="plan-badge plan-badge--subscribed">Базовый</span> · 3 интервью в день
+            <span class="plan-badge plan-badge--subscribed">Базовый</span> · истекает {{user.subscription_expires_at|date:"d.m.Y"}}
           {% else %}
             <span class="plan-badge plan-badge--free">Бесплатный</span> · 1 интервью в день
           {% endif %}

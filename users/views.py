@@ -101,7 +101,7 @@ def register(request):
                 _send_confirmation_email(user, request)
                 messages.info(
                     request,
-                    f'Письмо с подтверждением email отправлено на {user.email}. Проверьте почту.',
+                    f'Письмо с подтверждением отправлено на {user.email}. Если не видите — проверьте папку «Спам».',
                 )
             except Exception as e:
                 logger.warning("Confirmation email failed for user=%s: %s", user.username, e)
@@ -128,7 +128,7 @@ def send_confirmation(request):
         return redirect('users:settings')
     try:
         _send_confirmation_email(user, request)
-        messages.success(request, f'Письмо с подтверждением отправлено на {user.email}.')
+        messages.success(request, f'Письмо с подтверждением отправлено на {user.email}. Если не видите — проверьте папку «Спам».')
         logger.info("Confirmation email sent to user=%s <%s>", user.username, user.email)
     except Exception as e:
         logger.error("Confirmation email failed for user=%s: %s", user.username, e)
