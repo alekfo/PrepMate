@@ -130,58 +130,6 @@ def evaluate_answer(question_text: str, answer_text: str, vacancy_context: str) 
     return result
 
 
-def generate_session_advice(session) -> dict:
-    logger.info("Generating session advice for session=%d", session.id)
-
-    feedbacks = []
-    for question in session.questions.prefetch_related('answer__feedback').all():
-        answer = getattr(question, 'answer', None)
-        feedback = getattr(answer, 'feedback', None) if answer else None
-        if feedback:
-            feedbacks.append({
-                'question': question.text,
-                'score': feedback.score,
-                'strengths': feedback.strengths,
-                'improvements': feedback.improvements,
-                'weakness_tags': feedback.weakness_tags,
-            })
-
-    questions_block = '\n'.join(
-        f'  {i+1}. [{f["score"]}/10] {f["question"]}\n'
-        f'     Слабые стороны: {", ".join(f["weakness_tags"]) or "—"}\n'
-        f'     Улучшить: {"; ".join(f["improvements"][:2])}'
-        for i, f in enumerate(feedbacks)
-    )
-
-    text = _ask(f"""Ты мотивирующий карьерный коуч. Проанализируй результаты прохождения mock-интервью и дай персональные рекомендации.
-
-Вакансия: {session.job_title or "не указана"}{f", {session.company_name}" if session.company_name else ""}
-Уровень подготовки: {session.get_level_display()}
-Контекст: {session.vacancy_text[:300]}
-
-Важно: кандидат проходит mock-интервью на уровне «{session.get_level_display()}». Оценивай результаты относительно этого уровня подготовки — не как итоговое собеседование на вакансию.
-
-Общий балл: {session.overall_score:.1f}/10
-Вопросы и оценки:
-{questions_block}
-
-Ответь строго в формате JSON:
-{{
-  "summary": "Общий вывод по сессии — 2-3 предложения. Отметь что получилось хорошо и что стоит улучшить. Тон: поддерживающий, конкретный.",
-  "advice": [
-    "Конкретный совет 1, привязанный к слабым местам этой сессии",
-    "Конкретный совет 2",
-    "Конкретный совет 3"
-  ],
-  "focus_topics": ["Тема для изучения 1", "Тема для изучения 2"]
-}}
-
-focus_topics — конкретные темы или навыки для подготовки, привязанные к домену вакансии.""")
-
-    result = _parse_json(text)
-    logger.info("Session advice generated for session=%d", session.id)
-    return result
-
 
 def generate_vacancy_advice(vacancy_profile) -> dict:
     logger.info("Generating vacancy advice for vacancy_profile=%d", vacancy_profile.id)

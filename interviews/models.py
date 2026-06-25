@@ -92,20 +92,6 @@ class Feedback(models.Model):
         return f'Feedback [{self.score}/10] для {self.answer}'
 
 
-class SessionAdvice(models.Model):
-    session = models.OneToOneField(InterviewSession, on_delete=models.CASCADE, related_name='advice')
-    summary = models.TextField()
-    advice = models.JSONField(default=list)
-    focus_topics = models.JSONField(default=list)
-    generated_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = 'Совет по сессии'
-        verbose_name_plural = 'Советы по сессиям'
-
-    def __str__(self):
-        return f'SessionAdvice для {self.session}'
-
 
 class VacancyAdvice(models.Model):
     vacancy_profile = models.OneToOneField(VacancyProfile, on_delete=models.CASCADE, related_name='advice')

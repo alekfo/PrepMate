@@ -9,8 +9,8 @@ from django.core.cache import cache
 from django.utils import timezone
 from django.db.models import Count, Q
 
-from .models import InterviewSession, Question, UserAnswer, Feedback, VacancyProfile, SessionAdvice, VacancyAdvice
-from .services import generate_questions, evaluate_answer, generate_session_advice, generate_vacancy_advice
+from .models import InterviewSession, Question, UserAnswer, Feedback, VacancyProfile, VacancyAdvice
+from .services import generate_questions, evaluate_answer, generate_vacancy_advice
 
 logger = logging.getLogger(__name__)
 
@@ -290,23 +290,6 @@ def statistics_vacancy(request, vacancy_id):
     vacancy_advice = None
 
     if completed_sessions:
-        existing_advice = set(
-            SessionAdvice.objects.filter(session__in=completed_sessions)
-            .values_list('session_id', flat=True)
-        )
-        for session in completed_sessions:
-            if session.id not in existing_advice:
-                try:
-                    data = generate_session_advice(session)
-                    SessionAdvice.objects.create(
-                        session=session,
-                        summary=data.get('summary', ''),
-                        advice=data.get('advice', []),
-                        focus_topics=data.get('focus_topics', []),
-                    )
-                except Exception as e:
-                    logger.error("generate_session_advice failed: session=%d: %s", session.id, e)
-
         current_count = len(completed_sessions)
         try:
             vacancy_advice = vacancy_profile.advice
