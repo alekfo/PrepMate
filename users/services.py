@@ -17,6 +17,7 @@ PLAN_DESCRIPTIONS = {
 
 
 def _configure_yookassa():
+    """Инициализирует SDK YooKassa учётными данными из settings."""
     Configuration.account_id = settings.YOOKASSA_SHOP_ID
     Configuration.secret_key = settings.YOOKASSA_SECRET_KEY
 
@@ -102,6 +103,7 @@ def activate_subscription(user, payment):
 
 
 def _send_subscription_activated_email(user, sub):
+    """Отправляет пользователю письмо об успешной активации подписки. fail_silently."""
     plan_name = dict(sub.PLAN_CHOICES).get(sub.plan, sub.plan)
     try:
         send_mail(

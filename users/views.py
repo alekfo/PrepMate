@@ -31,6 +31,11 @@ _YOOKASSA_SINGLE_IPS = {
 
 
 def _is_yookassa_ip(request):
+    """Проверяет, принадлежит ли IP запроса официальным сетям YooKassa.
+
+    IP берётся из X-Real-IP (выставляется nginx), fallback — REMOTE_ADDR.
+    Покрывает официальные CIDR-диапазоны и отдельные адреса из документации YooKassa.
+    """
     ip_str = request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR', '')
     try:
         ip = ipaddress.ip_address(ip_str)
@@ -42,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 def _send_confirmation_email(user, request):
+    """Отправляет письмо с токеном подтверждения email. Токен действителен 24 часа."""
     token = signing.dumps({'uid': user.pk}, salt='email-confirm')
     confirm_url = request.build_absolute_uri(f'/users/confirm-email/?token={token}')
     send_mail(
@@ -60,6 +66,7 @@ def _send_confirmation_email(user, request):
 
 
 def _notify_admin_new_user(user):
+    """Отправляет уведомление на SUPPORT_EMAIL при регистрации нового пользователя. fail_silently."""
     try:
         send_mail(
             subject=f"Новый пользователь в PrepStats: {user.username}",
@@ -81,6 +88,10 @@ _REGISTER_RATE_LIMIT = 5  # попыток регистрации с одног�
 
 
 def register(request):
+    """Регистрация нового пользователя с rate-limit по IP (5 попыток/час).
+
+    После успешной регистрации выполняет вход и отправляет письмо подтверждения email.
+    """
     if request.method == 'POST':
         ip = request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR', '')
         rate_key = f'register_attempts_{ip}'
@@ -113,11 +124,13 @@ def register(request):
 
 @login_required
 def settings_page(request):
+    """Страница настроек аккаунта: email, подтверждение, смена пароля, информация о подписке."""
     return render(request, 'users/settings.html')
 
 
 @login_required
 def send_confirmation(request):
+    """Повторно отправляет письмо подтверждения email по запросу пользователя из настроек."""
     if request.method != 'POST':
         return redirect('users:settings')
     user = request.user
@@ -137,6 +150,11 @@ def send_confirmation(request):
 
 
 def confirm_email(request):
+    """Верифицирует токен из письма и устанавливает email_confirmed = True.
+
+    Токен подписан через django.core.signing, TTL 24 часа.
+    При истёкшем или недействительном токене показывает сообщение об ошибке.
+    """
     token = request.GET.get('token', '')
     try:
         data = signing.loads(token, salt='email-confirm', max_age=86400)
@@ -157,6 +175,7 @@ def confirm_email(request):
 
 @login_required
 def subscription(request):
+    """Страница тарифов: показывает текущий план пользователя и кнопки покупки подписки."""
     u = request.user
     if u.is_premium:
         current_plan = 'premium'
@@ -173,6 +192,10 @@ def subscription(request):
 @login_required
 @require_POST
 def create_payment(request):
+    """Создаёт платёж в YooKassa и перенаправляет пользователя на страницу оплаты.
+
+    Проверяет корректность плана и запрещает даунгрейд текущей подписки.
+    """
     from .services import create_yookassa_payment
 
     plan = request.POST.get('plan')
@@ -203,6 +226,11 @@ def create_payment(request):
 @csrf_exempt
 @require_POST
 def payment_webhook(request):
+    """Обрабатывает webhook payment.succeeded от YooKassa и активирует подписку.
+
+    Проверяет IP отправителя; идемпотентен — повторный webhook по уже обработанному
+    платежу игнорируется. Всегда возвращает HTTP 200 чтобы не раскрывать детали.
+    """
     from .services import activate_subscription
 
     if not _is_yookassa_ip(request):
@@ -253,18 +281,22 @@ def payment_return(request):
 
 
 def privacy_policy(request):
+    """Страница политики конфиденциальности."""
     return render(request, 'users/privacy_policy.html')
 
 
 def public_offer(request):
+    """Страница договора публичной оферты."""
     return render(request, 'users/public_offer.html')
 
 
 def about(request):
+    """Страница «О проекте»."""
     return render(request, 'users/about.html')
 
 
 def contact(request):
+    """Форма обратной связи: отправляет письмо на SUPPORT_EMAIL. Для авторизованных — предзаполняет поля."""
     initial = {}
     if request.user.is_authenticated:
         initial = {

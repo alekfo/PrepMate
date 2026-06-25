@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def index(request):
+    """Главная страница: лендинг для гостей, форма ввода вакансии для авторизованных пользователей."""
     limit_reached = False
     past_vacancies = []
     if request.user.is_authenticated:
@@ -41,6 +42,9 @@ def index(request):
 
 @login_required
 def start(request):
+    """Создаёт новую сессию интервью: валидирует лимиты, генерирует вопросы через Claude,
+    создаёт InterviewSession, Question и VacancyProfile (или дополняет существующий).
+    """
     if request.method != 'POST':
         return redirect('interviews:index')
 
@@ -113,6 +117,11 @@ def start(request):
 
 @login_required
 def question(request, session_id, order):
+    """Показывает вопрос (GET) и сохраняет ответ с оценкой Claude (POST).
+
+    После последнего ответа завершает сессию и перенаправляет на отчёт.
+    Пропускает уже отвеченные вопросы при повторном GET.
+    """
     session = get_object_or_404(InterviewSession, id=session_id, user=request.user)
     questions = list(session.questions.all())
     total = len(questions)
@@ -187,6 +196,7 @@ def question(request, session_id, order):
 
 @login_required
 def resume(request, session_id):
+    """Перенаправляет на первый неотвеченный вопрос сессии или на отчёт если сессия завершена."""
     session = get_object_or_404(InterviewSession, id=session_id, user=request.user)
     if session.status == 'completed':
         return redirect('interviews:report', session_id=session.id)
@@ -198,6 +208,7 @@ def resume(request, session_id):
 
 @login_required
 def history(request):
+    """Список всех сессий пользователя с аннотациями total и answered для отображения прогресса."""
     sessions = InterviewSession.objects.filter(user=request.user).annotate(
         total=Count('questions'),
         answered=Count('questions', filter=Q(questions__answer__isnull=False)),
@@ -207,6 +218,7 @@ def history(request):
 
 @login_required
 def report(request, session_id):
+    """Итоговый отчёт по завершённой сессии: вопросы, ответы, оценки и фидбек."""
     session = get_object_or_404(InterviewSession, id=session_id, user=request.user)
     questions = session.questions.prefetch_related('answer__feedback').all()
     return render(request, 'interviews/report.html', {
@@ -229,6 +241,10 @@ _TAG_LABELS = {
 
 @login_required
 def statistics_overview(request):
+    """Обзор вакансий подписчика: средний балл, тренд, топ тегов слабых мест по каждой вакансии.
+
+    Доступно только подписчикам; остальных перенаправляет на страницу тарифов.
+    """
     has_subscription = request.user.is_subscribed or request.user.is_premium
     if not has_subscription:
         return redirect('users:subscription')
@@ -275,6 +291,12 @@ def statistics_overview(request):
 
 @login_required
 def statistics_vacancy(request, vacancy_id):
+    """Детальная страница вакансии: график прогресса, динамика тегов, AI-анализ (VacancyAdvice).
+
+    При каждом визите проверяет появление новых сессий и при необходимости
+    перегенерирует VacancyAdvice. Cooldown 5 минут защищает от двойных запросов к API.
+    Доступно только подписчикам.
+    """
     has_subscription = request.user.is_subscribed or request.user.is_premium
     if not has_subscription:
         return redirect('users:subscription')
@@ -347,6 +369,10 @@ def statistics_vacancy(request, vacancy_id):
 
 @login_required
 def flashcards(request):
+    """Страница выбора вакансии и фильтров для тренировки флэш-карточек.
+
+    Доступно только подписчикам; показывает вакансии с хотя бы одной завершённой сессией.
+    """
     has_subscription = request.user.is_subscribed or request.user.is_premium
     if not has_subscription:
         return redirect('users:subscription')
@@ -364,6 +390,11 @@ def flashcards(request):
 
 @login_required
 def flashcards_train(request):
+    """Тренировка флэш-карточек по выбранной вакансии с фильтрами по типу вопроса, тегу и уровню.
+
+    Перемешивает карточки случайно; при пустом результате после фильтрации
+    показывает предупреждение и возвращает на страницу выбора.
+    """
     has_subscription = request.user.is_subscribed or request.user.is_premium
     if not has_subscription:
         return redirect('users:subscription')
@@ -428,6 +459,11 @@ def flashcards_train(request):
 
 
 def _compute_trend(scores: list) -> str:
+    """Вычисляет тренд по списку баллов: 'up', 'down' или 'neutral'.
+
+    Сравнивает среднее последних 3 сессий с предыдущими; порог ±0.5.
+    Возвращает 'neutral' если сессий менее 4.
+    """
     if len(scores) < 4:
         return 'neutral'
     recent = sum(scores[-3:]) / 3
@@ -442,6 +478,10 @@ def _compute_trend(scores: list) -> str:
 
 
 def _build_chart_points(sessions: list) -> str:
+    """Строит строку координат 'x,y x,y ...' для SVG-полилинии графика прогресса.
+
+    Использует целые числа во избежание локализованного float (запятая в русской локали ломает SVG).
+    """
     if not sessions:
         return ''
     pad_left, plot_w = 52, 536   # viewBox 600, right pad 12
@@ -457,6 +497,7 @@ def _build_chart_points(sessions: list) -> str:
 
 
 def _build_chart_labels(sessions: list) -> list:
+    """Строит список меток для точек SVG-графика: координаты x, y, балл и дата сессии."""
     if not sessions:
         return []
     pad_left, plot_w = 52, 536
@@ -477,6 +518,11 @@ def _build_chart_labels(sessions: list) -> list:
 
 
 def _build_tag_stats(sessions: list) -> list:
+    """Вычисляет статистику тегов слабых мест по всем сессиям.
+
+    Каждый тег получает статус: chronic (≥50% сессий), fixed (был раньше,
+    отсутствует в последних 3) или active (всё остальное).
+    """
     if not sessions:
         return []
     total = len(sessions)
