@@ -34,9 +34,16 @@ users/            — кастомная модель пользователя +
   urls.py         — маршруты users-приложения
   admin.py        — CustomUserAdmin, PaymentAdmin, SubscriptionAdmin
   management/commands/deactivate_expired_subscriptions.py — cron-команда
+resumes/          — раздел резюме (только подписчики)
+  models.py       — Resume, ResumeSection
+  views.py        — resume_list, resume_new, resume_step, resume_generate, resume_retry_ai, resume_detail
+  services.py     — polish_resume() (Claude API через прокси)
+  urls.py         — маршруты /resume/
+  admin.py        — ResumeAdmin, ResumeSectionAdmin
 templates/
   base.html       — навбар, спиннер-оверлей, футер
   interviews/     — index, question, report, history, flashcards, flashcards_train
+  resumes/        — list, step, detail
   users/          — login, register, settings, about, contact,
                     privacy_policy, public_offer,
                     password_change, password_change_done,
@@ -448,6 +455,113 @@ View `flashcards_train`. Принимает GET-параметры:
 - Карточки истории и блок score-card в отчёте окрашиваются по `overall_score`: `score--low` (< 2, красный), `score--mid` (2–7, жёлтый), `score--high` (> 7, зелёный) — переливающийся градиент через CSS `@keyframes score-shimmer`
 - В истории у каждой сессии под датой отображается уровень (`session.get_level_display`), если `level != 'common'`
 - `CSRF_TRUSTED_ORIGINS` — автоматически формируется из `ALLOWED_HOSTS` (исключая localhost)
+
+## Раздел Резюме (`resumes/`)
+
+Доступен только подписчикам (`is_subscribed` или `is_premium`). Не-подписчик редиректится на `/users/subscription/`.
+
+### Приложение `resumes/`
+
+```
+resumes/
+  models.py    — Resume, ResumeSection
+  views.py     — resume_list, resume_new, resume_step, resume_generate, resume_retry_ai, resume_detail
+  services.py  — polish_resume() (один запрос к Claude API)
+  urls.py      — маршруты /resume/
+  admin.py     — ResumeAdmin (с инлайном), ResumeSectionAdmin
+templates/resumes/
+  list.html    — список резюме + форма создания нового
+  step.html    — универсальный шаблон для всех 7 шагов опроса
+  detail.html  — итоговое резюме в виде документа
+```
+
+### Модели
+
+**`Resume`**
+| Поле | Тип | Назначение |
+|---|---|---|
+| `user` | FK → User | Владелец |
+| `profession` | CharField | Целевая должность (не редактируется пользователем) |
+| `status` | CharField | `draft` / `completed` / `completed_raw` |
+| `created_at` | DateTimeField | auto_now_add |
+| `updated_at` | DateTimeField | auto_now |
+
+**`ResumeSection`**
+| Поле | Тип | Назначение |
+|---|---|---|
+| `resume` | FK → Resume | Родительское резюме |
+| `section_type` | CharField | `contacts` / `summary` / `experience` / `education` / `skills` / `languages` / `certifications` |
+| `order` | PositiveSmallIntegerField | Порядок секции |
+| `raw_content` | JSONField | Сырые данные от пользователя |
+| `ai_content` | JSONField (null) | Улучшенная версия от AI |
+| `user_content` | JSONField (null) | Ручные правки пользователя (зарезервировано) |
+
+`display_content` — property: возвращает `user_content or ai_content or raw_content`.
+
+Уникальность: `unique_together = [('resume', 'section_type')]`.
+
+### Статусы Resume
+
+- `draft` — опрос ещё не завершён
+- `completed` — AI успешно обработал данные
+- `completed_raw` — AI не ответил, секции заполнены сырыми данными пользователя
+
+### URL-маршруты
+
+```
+/resume/                              → resume_list
+/resume/new/                          → resume_new (POST)
+/resume/<id>/step/<step>/             → resume_step (GET/POST)
+/resume/<id>/generate/                → resume_generate (POST, вызывается из step view)
+/resume/<id>/retry-ai/                → resume_retry_ai (POST)
+/resume/<id>/                         → resume_detail
+```
+
+### Шаги опроса (`RESUME_STEPS`)
+
+7 шагов, каждый сохраняет `ResumeSection.raw_content` в БД при сабмите:
+1. `contacts` — контактная информация (ФИО, email, телефон, город, LinkedIn, GitHub)
+2. `summary` — о себе (свободный текст, AI улучшает)
+3. `experience` — опыт работы (повторяющийся блок с JS-кнопкой "+")
+4. `education` — образование (повторяющийся блок)
+5. `skills` — навыки (hard + soft)
+6. `languages` — языки (повторяющийся инлайн-блок)
+7. `certifications` — курсы и сертификаты (повторяющийся, **необязательный** — есть кнопка "Пропустить этот раздел")
+
+На последнем шаге при сабмите автоматически запускается `_run_ai_polish()` (спиннер активируется через JS).
+
+### Валидация по шагам
+
+Обязательные поля (`_validate_step` в `views.py`):
+- `contacts`: full_name + (email или phone)
+- `summary`: text
+- `experience`: company, period_start, period_end, responsibilities — для каждой записи
+- `education`: institution, year — для каждой записи
+- `skills`: hard_skills
+- `languages`: хотя бы один язык
+- `certifications`: не валидируется (можно пропустить)
+
+### Флоу при сбое AI
+
+Если `polish_resume()` выбросил исключение → `Resume.status = 'completed_raw'`. На детальной странице:
+- Жёлтый баннер: «Не удалось улучшить резюме через AI — показана черновая версия»
+- Кнопка **"Улучшить с помощью AI"** → POST `/resume/<id>/retry-ai/` → повтор `_run_ai_polish()`
+
+### Claude API — `polish_resume(resume)`
+
+Один запрос на всё резюме. Собирает `raw_content` всех секций, формирует единый промпт с инструкцией перефразировать/улучшить формулировки, сохранить факты. Возвращает JSON вида `{section_type: улучшенный_контент}`. После успеха каждая секция получает `ai_content`.
+
+### Повторяющиеся блоки (JS)
+
+`step.html` содержит единый JS-блок для всех повторяющихся шагов:
+- Кнопка "+" клонирует первый `.repeating-item`, инкрементирует индексы в `name` атрибутах (`company-0`, `company-1`...)
+- Для обычных блоков кнопка "Удалить" добавляется в `.repeating-item-header`
+- Для инлайн-блоков (языки, `.repeating-item--inline`) кнопка добавляется с классом `.remove-item-btn--inline` и `grid-column: 1 / -1`
+- Первую запись нельзя удалить
+
+### Навигация
+
+"Резюме" добавлено в бургер-меню `base.html` (рядом с Флэш-карточками).
 
 ## Запуск (dev)
 

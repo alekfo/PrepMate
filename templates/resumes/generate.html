@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Составляем резюме — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page" style="text-align: center; margin-top: 100px;">
+  <h1>Данные собраны</h1>
+  <p class="subtitle">AI улучшит формулировки и сделает резюме профессиональным</p>
+
+  <form method="post" id="generateForm">
+    {% csrf_token %}
+    <button type="submit" class="btn" id="generateBtn">Улучшить с помощью AI и получить резюме</button>
+  </form>
+</div>
+
+<script>
+  document.getElementById('generateForm').addEventListener('submit', function () {
+    document.getElementById('generateBtn').disabled = true;
+    activateSpinner([
+      'Собираем данные резюме...',
+      'AI изучает ваш опыт...',
+      'Улучшаем формулировки...',
+      'Структурируем навыки и достижения...',
+      'Полируем текст о себе...',
+      'Работаем над опытом работы...',
+      'Доводим до профессионального уровня...',
+      'Почти готово...',
+    ]);
+  });
+</script>
+{% endblock %}

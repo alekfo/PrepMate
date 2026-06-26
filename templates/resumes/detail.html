@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}{{ resume.profession }} — Резюме — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  <a href="{% url 'resumes:list' %}" class="back-link">← Все резюме</a>
+
+  {% if ai_failed %}
+  <div class="advice-stale-banner" style="margin-bottom: 24px;">
+    Не удалось улучшить резюме через AI — показана черновая версия на основе ваших данных.
+    <form method="post" action="{% url 'resumes:retry_ai' resume_id=resume.id %}" style="display: inline; margin-left: 12px;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-secondary" style="margin-top: 0; padding: 4px 14px; font-size: 13px;" id="retryBtn">
+        Улучшить с помощью AI
+      </button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="resume-doc">
+
+    {# ── Шапка ── #}
+    {% with s=sections.contacts %}
+    {% if s %}
+    {% with c=s.display_content %}
+    <div class="resume-doc-header">
+      <h1 class="resume-doc-name">{{ c.full_name }}</h1>
+      <div class="resume-doc-title">{{ resume.profession }}</div>
+      <div class="resume-doc-contacts">
+        {% if c.email %}<span>{{ c.email }}</span>{% endif %}
+        {% if c.phone %}<span>{{ c.phone }}</span>{% endif %}
+        {% if c.city %}<span>{{ c.city }}</span>{% endif %}
+        {% if c.linkedin %}<span>{{ c.linkedin }}</span>{% endif %}
+        {% if c.github %}<span>{{ c.github }}</span>{% endif %}
+      </div>
+    </div>
+    {% endwith %}
+    {% endif %}
+    {% endwith %}
+
+    {# ── О себе ── #}
+    {% with s=sections.summary %}
+    {% if s %}
+    {% with c=s.display_content %}
+    {% if c.text %}
+    <div class="resume-doc-section">
+      <div class="resume-doc-section-title">О себе</div>
+      <p class="resume-doc-text">{{ c.text }}</p>
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+    {% endwith %}
+
+    {# ── Опыт работы ── #}
+    {% with s=sections.experience %}
+    {% if s %}
+    {% with items=s.display_content %}
+    {% if items %}
+    <div class="resume-doc-section">
+      <div class="resume-doc-section-title">Опыт работы</div>
+      {% for item in items %}
+      <div class="resume-exp-item">
+        <div class="resume-exp-header">
+          <div>
+            <div class="resume-exp-position">{{ item.position }}</div>
+            <div class="resume-exp-company">{{ item.company }}</div>
+          </div>
+          <div class="resume-exp-period">{{ item.period_start }} — {{ item.period_end }}</div>
+        </div>
+        {% if item.responsibilities %}
+        <p class="resume-doc-text" style="margin-top: 8px;">{{ item.responsibilities }}</p>
+        {% endif %}
+        {% if item.achievements %}
+        <p class="resume-doc-text resume-achievements">{{ item.achievements }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+    {% endwith %}
+
+    {# ── Образование ── #}
+    {% with s=sections.education %}
+    {% if s %}
+    {% with items=s.display_content %}
+    {% if items %}
+    <div class="resume-doc-section">
+      <div class="resume-doc-section-title">Образование</div>
+      {% for item in items %}
+      <div class="resume-edu-item">
+        <div class="resume-exp-header">
+          <div>
+            <div class="resume-exp-position">{{ item.institution }}</div>
+            <div class="resume-exp-company">{{ item.specialty }}{% if item.degree %} · {{ item.degree }}{% endif %}</div>
+          </div>
+          {% if item.year %}<div class="resume-exp-period">{{ item.year }}</div>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+    {% endwith %}
+
+    {# ── Навыки ── #}
+    {% with s=sections.skills %}
+    {% if s %}
+    {% with c=s.display_content %}
+    {% if c.hard_skills or c.soft_skills %}
+    <div class="resume-doc-section">
+      <div class="resume-doc-section-title">Навыки</div>
+      {% if c.hard_skills %}
+      <p class="resume-doc-text"><strong>Профессиональные:</strong> {{ c.hard_skills }}</p>
+      {% endif %}
+      {% if c.soft_skills %}
+      <p class="resume-doc-text" style="margin-top: 6px;"><strong>Личные:</strong> {{ c.soft_skills }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+    {% endwith %}
+
+    {# ── Языки ── #}
+    {% with s=sections.languages %}
+    {% if s %}
+    {% with items=s.display_content %}
+    {% if items %}
+    <div class="resume-doc-section">
+      <div class="resume-doc-section-title">Языки</div>
+      <div class="resume-lang-list">
+        {% for item in items %}
+        <span class="resume-lang-item">{{ item.language }} — {{ item.level }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+    {% endwith %}
+
+    {# ── Курсы и сертификаты ── #}
+    {% with s=sections.certifications %}
+    {% if s %}
+    {% with items=s.display_content %}
+    {% if items %}
+    <div class="resume-doc-section">
+      <div class="resume-doc-section-title">Курсы и сертификаты</div>
+      {% for item in items %}
+      {% if item.name %}
+      <div class="resume-cert-item">
+        <span class="resume-exp-position">{{ item.name }}</span>
+        {% if item.platform %}<span class="resume-exp-company"> · {{ item.platform }}</span>{% endif %}
+        {% if item.year %}<span class="resume-exp-period"> · {{ item.year }}</span>{% endif %}
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+    {% endwith %}
+
+  </div>{# /resume-doc #}
+
+</div>
+
+{% if ai_failed %}
+<script>
+  document.querySelector('form[action*="retry-ai"] button').addEventListener('click', function () {
+    activateSpinner([
+      'Повторяем запрос к AI...',
+      'AI изучает ваш опыт...',
+      'Улучшаем формулировки...',
+      'Почти готово...',
+    ]);
+  });
+</script>
+{% endif %}
+{% endblock %}

@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'users',
     'interviews',
+    'resumes',
 ]
 
 MIDDLEWARE = [
@@ -160,6 +161,11 @@ LOGGING = {
             'propagate': False,
         },
         'users': {
+            'handlers': ['console'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+        'resumes': {
             'handlers': ['console'],
             'level': 'DEBUG' if DEBUG else 'INFO',
             'propagate': False,
