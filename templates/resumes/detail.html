@@ -8,14 +8,25 @@
   <a href="{% url 'resumes:list' %}" class="back-link">← Все резюме</a>
 
   {% if ai_failed %}
-  <div class="advice-stale-banner" style="margin-bottom: 24px;">
-    Не удалось улучшить резюме через AI — показана черновая версия на основе ваших данных.
-    <form method="post" action="{% url 'resumes:retry_ai' resume_id=resume.id %}" style="display: inline; margin-left: 12px;">
+  <div class="resume-ai-banner resume-ai-banner--failed">
+    <div class="resume-ai-banner-left">
+      <span class="resume-ai-banner-icon">!</span>
+      <div>
+        <div class="resume-ai-banner-title">AI не смог обработать резюме</div>
+        <div class="resume-ai-banner-text">Резюме заполнено на основе ваших данных без улучшений.</div>
+      </div>
+    </div>
+    <form method="post" action="{% url 'resumes:retry_ai' resume_id=resume.id %}">
       {% csrf_token %}
-      <button type="submit" class="btn btn-secondary" style="margin-top: 0; padding: 4px 14px; font-size: 13px;" id="retryBtn">
-        Улучшить с помощью AI
+      <button type="submit" class="btn" id="retryBtn" style="margin-top: 0; white-space: nowrap;">
+        Повторно проконсультироваться с AI
       </button>
     </form>
+  </div>
+  {% else %}
+  <div class="resume-ai-banner resume-ai-banner--success">
+    <span class="resume-ai-banner-check">✓</span>
+    Улучшено с помощью AI
   </div>
   {% endif %}
 
@@ -26,8 +37,14 @@
     {% if s %}
     {% with c=s.display_content %}
     <div class="resume-doc-header">
-      <h1 class="resume-doc-name">{{ c.full_name }}</h1>
-      <div class="resume-doc-title">{{ resume.profession }}</div>
+      <div class="resume-doc-header-top">
+        <h1 class="resume-doc-name">{{ c.full_name }}</h1>
+        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='contacts' %}" class="resume-edit-btn">Изменить</a>
+      </div>
+      <div class="resume-doc-title-row">
+        <div class="resume-doc-title">{{ resume.profession }}</div>
+        <div class="resume-doc-experience">Стаж {{ experience_label }}</div>
+      </div>
       <div class="resume-doc-contacts">
         {% if c.email %}<span>{{ c.email }}</span>{% endif %}
         {% if c.phone %}<span>{{ c.phone }}</span>{% endif %}
@@ -46,7 +63,10 @@
     {% with c=s.display_content %}
     {% if c.text %}
     <div class="resume-doc-section">
-      <div class="resume-doc-section-title">О себе</div>
+      <div class="resume-section-header">
+        <div class="resume-doc-section-title">О себе</div>
+        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='summary' %}" class="resume-edit-btn">Изменить</a>
+      </div>
       <p class="resume-doc-text">{{ c.text }}</p>
     </div>
     {% endif %}
@@ -55,34 +75,35 @@
     {% endwith %}
 
     {# ── Опыт работы ── #}
-    {% with s=sections.experience %}
-    {% if s %}
-    {% with items=s.display_content %}
-    {% if items %}
     <div class="resume-doc-section">
-      <div class="resume-doc-section-title">Опыт работы</div>
-      {% for item in items %}
-      <div class="resume-exp-item">
-        <div class="resume-exp-header">
-          <div>
-            <div class="resume-exp-position">{{ item.position }}</div>
-            <div class="resume-exp-company">{{ item.company }}</div>
-          </div>
-          <div class="resume-exp-period">{{ item.period_start }} — {{ item.period_end }}</div>
-        </div>
-        {% if item.responsibilities %}
-        <p class="resume-doc-text" style="margin-top: 8px;">{{ item.responsibilities }}</p>
-        {% endif %}
-        {% if item.achievements %}
-        <p class="resume-doc-text resume-achievements">{{ item.achievements }}</p>
-        {% endif %}
+      <div class="resume-section-header">
+        <div class="resume-doc-section-title">Опыт работы</div>
+        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='experience' %}" class="resume-edit-btn">Изменить</a>
       </div>
-      {% endfor %}
+      {% with s=sections.experience %}
+      {% if s and s.display_content %}
+        {% for item in s.display_content %}
+        <div class="resume-exp-item">
+          <div class="resume-exp-header">
+            <div>
+              <div class="resume-exp-position">{{ item.position }}</div>
+              <div class="resume-exp-company">{{ item.company }}</div>
+            </div>
+            <div class="resume-exp-period">{{ item.period_start }} — {{ item.period_end }}</div>
+          </div>
+          {% if item.responsibilities %}
+          <p class="resume-doc-text" style="margin-top: 8px;">{{ item.responsibilities }}</p>
+          {% endif %}
+          {% if item.achievements %}
+          <p class="resume-doc-text resume-achievements">{{ item.achievements }}</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="resume-doc-text resume-empty-section">Опыт работы не указан</p>
+      {% endif %}
+      {% endwith %}
     </div>
-    {% endif %}
-    {% endwith %}
-    {% endif %}
-    {% endwith %}
 
     {# ── Образование ── #}
     {% with s=sections.education %}
@@ -90,7 +111,10 @@
     {% with items=s.display_content %}
     {% if items %}
     <div class="resume-doc-section">
-      <div class="resume-doc-section-title">Образование</div>
+      <div class="resume-section-header">
+        <div class="resume-doc-section-title">Образование</div>
+        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='education' %}" class="resume-edit-btn">Изменить</a>
+      </div>
       {% for item in items %}
       <div class="resume-edu-item">
         <div class="resume-exp-header">
@@ -114,7 +138,10 @@
     {% with c=s.display_content %}
     {% if c.hard_skills or c.soft_skills %}
     <div class="resume-doc-section">
-      <div class="resume-doc-section-title">Навыки</div>
+      <div class="resume-section-header">
+        <div class="resume-doc-section-title">Навыки</div>
+        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='skills' %}" class="resume-edit-btn">Изменить</a>
+      </div>
       {% if c.hard_skills %}
       <p class="resume-doc-text"><strong>Профессиональные:</strong> {{ c.hard_skills }}</p>
       {% endif %}
@@ -133,7 +160,10 @@
     {% with items=s.display_content %}
     {% if items %}
     <div class="resume-doc-section">
-      <div class="resume-doc-section-title">Языки</div>
+      <div class="resume-section-header">
+        <div class="resume-doc-section-title">Языки</div>
+        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='languages' %}" class="resume-edit-btn">Изменить</a>
+      </div>
       <div class="resume-lang-list">
         {% for item in items %}
         <span class="resume-lang-item">{{ item.language }} — {{ item.level }}</span>
@@ -151,7 +181,10 @@
     {% with items=s.display_content %}
     {% if items %}
     <div class="resume-doc-section">
-      <div class="resume-doc-section-title">Курсы и сертификаты</div>
+      <div class="resume-section-header">
+        <div class="resume-doc-section-title">Курсы и сертификаты</div>
+        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='certifications' %}" class="resume-edit-btn">Изменить</a>
+      </div>
       {% for item in items %}
       {% if item.name %}
       <div class="resume-cert-item">
@@ -173,7 +206,7 @@
 
 {% if ai_failed %}
 <script>
-  document.querySelector('form[action*="retry-ai"] button').addEventListener('click', function () {
+  document.getElementById('retryBtn').addEventListener('click', function () {
     activateSpinner([
       'Повторяем запрос к AI...',
       'AI изучает ваш опыт...',

@@ -51,7 +51,7 @@ def polish_resume(resume) -> dict:
     """
     logger.info("Polishing resume id=%d profession=%r", resume.id, resume.profession)
 
-    sections = {s.section_type: s.raw_content for s in resume.sections.all()}
+    sections = {s.section_type: s.display_content for s in resume.sections.all()}
 
     contacts = sections.get('contacts', {})
     summary = sections.get('summary', {})

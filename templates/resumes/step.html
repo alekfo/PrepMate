@@ -5,6 +5,9 @@
 {% block content %}
 <div class="page">
 
+  {% if is_edit_mode %}
+  <a href="{% url 'resumes:detail' resume_id=resume.id %}" class="back-link">← Назад к резюме</a>
+  {% else %}
   <div class="progress-header">
     <div class="progress-meta">
       <span class="progress-session">{{ resume.profession }}</span>
@@ -14,6 +17,7 @@
       <div class="progress-fill" style="width: {% widthratio step_index|add:1 step_total 100 %}%"></div>
     </div>
   </div>
+  {% endif %}
 
   <h1>{{ step_title }}</h1>
 
@@ -61,6 +65,9 @@
 
     {# ── Experience ── #}
     {% elif step == 'experience' %}
+    {% if not is_edit_mode %}
+    <p class="field-hint" style="margin-bottom: 20px;">Если опыта работы нет — оставьте форму пустой и нажмите «Далее».</p>
+    {% endif %}
     <div id="repeating-container">
       {% if existing %}
         {% for item in existing %}
@@ -212,7 +219,6 @@
       {% if existing %}
         {% for item in existing %}
         <div class="repeating-item repeating-item--inline" data-index="{{ forloop.counter0 }}">
-          {% if not forloop.first %}<button type="button" class="remove-item-btn" onclick="removeItem(this)">Удалить</button>{% endif %}
           <div class="form-group">
             <label>Язык</label>
             <input type="text" name="language-{{ forloop.counter0 }}" placeholder="Английский" value="{{ item.language }}">
@@ -221,6 +227,7 @@
             <label>Уровень</label>
             <input type="text" name="level-{{ forloop.counter0 }}" placeholder="B2 / Intermediate / Родной" value="{{ item.level }}">
           </div>
+          {% if not forloop.first %}<button type="button" class="remove-item-btn remove-item-btn--inline" onclick="removeItem(this)">Удалить</button>{% endif %}
         </div>
         {% endfor %}
       {% else %}
@@ -291,15 +298,19 @@
     {% endif %}
 
     <div class="step-actions">
-      {% if prev_step %}
-      <a href="{% url 'resumes:step' resume_id=resume.id step=prev_step %}" class="btn btn-secondary" style="margin-top: 0;">← Назад</a>
-      {% endif %}
-
-      {% if is_last %}
-        <button type="submit" class="btn" id="submitBtn" style="margin-top: 0;">Сохранить и составить резюме</button>
-        <button type="submit" name="action" value="skip" form="stepForm" class="btn btn-secondary" id="skipBtn" style="margin-top: 0;">Пропустить этот раздел</button>
+      {% if is_edit_mode %}
+        <a href="{% url 'resumes:detail' resume_id=resume.id %}" class="btn btn-secondary" style="margin-top: 0;">Отмена</a>
+        <button type="submit" class="btn" style="margin-top: 0;">Сохранить изменения</button>
       {% else %}
-        <button type="submit" class="btn" id="submitBtn" style="margin-top: 0;">Далее →</button>
+        {% if prev_step %}
+        <a href="{% url 'resumes:step' resume_id=resume.id step=prev_step %}" class="btn btn-secondary" style="margin-top: 0;">← Назад</a>
+        {% endif %}
+        {% if is_last %}
+          <button type="submit" class="btn" id="submitBtn" style="margin-top: 0;">Сохранить и составить резюме</button>
+          <button type="submit" name="action" value="skip" form="stepForm" class="btn btn-secondary" id="skipBtn" style="margin-top: 0;">Пропустить этот раздел</button>
+        {% else %}
+          <button type="submit" class="btn" id="submitBtn" style="margin-top: 0;">Далее →</button>
+        {% endif %}
       {% endif %}
     </div>
 

@@ -2213,6 +2213,77 @@ footer a:hover {
   flex-wrap: wrap;
 }
 
+/* Resume AI banners */
+.resume-ai-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+  margin-bottom: 20px;
+}
+
+.resume-ai-banner--success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.resume-ai-banner--failed {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: var(--text);
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.resume-ai-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.resume-ai-banner-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fb923c;
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.resume-ai-banner-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.resume-ai-banner-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  margin-bottom: 2px;
+}
+
+.resume-ai-banner-text {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
 /* Resume document */
 .resume-doc {
   border: 1px solid var(--border);
@@ -2228,6 +2299,44 @@ footer a:hover {
   background: #f8f7f5;
 }
 
+.resume-doc-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.resume-doc-header-top .resume-doc-name {
+  margin-bottom: 0;
+}
+
+.resume-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.resume-section-header .resume-doc-section-title {
+  margin-bottom: 0;
+}
+
+.resume-edit-btn {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.resume-edit-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
 .resume-doc-name {
   font-size: 26px;
   font-weight: 700;
@@ -2235,10 +2344,24 @@ footer a:hover {
   margin-bottom: 4px;
 }
 
+.resume-doc-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 .resume-doc-title {
   font-size: 15px;
   color: var(--text-secondary);
-  margin-bottom: 12px;
+}
+
+.resume-doc-experience {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .resume-doc-contacts {
@@ -2308,6 +2431,12 @@ footer a:hover {
 .resume-achievements {
   color: var(--text-secondary);
   font-style: italic;
+}
+
+.resume-empty-section {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 13.5px;
 }
 
 .resume-edu-item {

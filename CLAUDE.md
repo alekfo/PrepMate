@@ -465,13 +465,14 @@ View `flashcards_train`. Принимает GET-параметры:
 ```
 resumes/
   models.py    — Resume, ResumeSection
-  views.py     — resume_list, resume_new, resume_step, resume_generate, resume_retry_ai, resume_detail
+  views.py     — resume_list, resume_new, resume_step, resume_edit_section,
+                  resume_generate, resume_retry_ai, resume_detail
   services.py  — polish_resume() (один запрос к Claude API)
   urls.py      — маршруты /resume/
   admin.py     — ResumeAdmin (с инлайном), ResumeSectionAdmin
 templates/resumes/
   list.html    — список резюме + форма создания нового
-  step.html    — универсальный шаблон для всех 7 шагов опроса
+  step.html    — универсальный шаблон для всех 7 шагов опроса + режим редактирования (is_edit_mode)
   detail.html  — итоговое резюме в виде документа
 ```
 
@@ -494,9 +495,11 @@ templates/resumes/
 | `order` | PositiveSmallIntegerField | Порядок секции |
 | `raw_content` | JSONField | Сырые данные от пользователя |
 | `ai_content` | JSONField (null) | Улучшенная версия от AI |
-| `user_content` | JSONField (null) | Ручные правки пользователя (зарезервировано) |
+| `user_content` | JSONField (null) | Ручные правки пользователя через «Изменить» |
 
 `display_content` — property: возвращает `user_content or ai_content or raw_content`.
+
+**Приоритет слоёв:** ручные правки (`user_content`) > AI-версия (`ai_content`) > сырые данные (`raw_content`). При повторном прогоне через AI (`_run_ai_polish`) `user_content` сбрасывается в `None` — пользователь видит свежую AI-версию. Признак того, что AI точно поработал над секцией: `ai_content is not None`.
 
 Уникальность: `unique_together = [('resume', 'section_type')]`.
 
@@ -511,7 +514,8 @@ templates/resumes/
 ```
 /resume/                              → resume_list
 /resume/new/                          → resume_new (POST)
-/resume/<id>/step/<step>/             → resume_step (GET/POST)
+/resume/<id>/step/<step>/             → resume_step (GET/POST, только для draft)
+/resume/<id>/edit/<step>/             → resume_edit_section (GET/POST, только для completed/completed_raw)
 /resume/<id>/generate/                → resume_generate (POST, вызывается из step view)
 /resume/<id>/retry-ai/                → resume_retry_ai (POST)
 /resume/<id>/                         → resume_detail
@@ -522,7 +526,7 @@ templates/resumes/
 7 шагов, каждый сохраняет `ResumeSection.raw_content` в БД при сабмите:
 1. `contacts` — контактная информация (ФИО, email, телефон, город, LinkedIn, GitHub)
 2. `summary` — о себе (свободный текст, AI улучшает)
-3. `experience` — опыт работы (повторяющийся блок с JS-кнопкой "+")
+3. `experience` — опыт работы (повторяющийся блок с JS-кнопкой "+", **необязательный** — можно оставить пустым)
 4. `education` — образование (повторяющийся блок)
 5. `skills` — навыки (hard + soft)
 6. `languages` — языки (повторяющийся инлайн-блок)
@@ -535,21 +539,44 @@ templates/resumes/
 Обязательные поля (`_validate_step` в `views.py`):
 - `contacts`: full_name + (email или phone)
 - `summary`: text
-- `experience`: company, period_start, period_end, responsibilities — для каждой записи
+- `experience`: **секция необязательна** (пустой список проходит); если записи добавлены — каждая требует company, period_start, period_end, responsibilities
 - `education`: institution, year — для каждой записи
 - `skills`: hard_skills
 - `languages`: хотя бы один язык
 - `certifications`: не валидируется (можно пропустить)
 
-### Флоу при сбое AI
+### Редактирование секций (`resume_edit_section`)
 
-Если `polish_resume()` выбросил исключение → `Resume.status = 'completed_raw'`. На детальной странице:
-- Жёлтый баннер: «Не удалось улучшить резюме через AI — показана черновая версия»
-- Кнопка **"Улучшить с помощью AI"** → POST `/resume/<id>/retry-ai/` → повтор `_run_ai_polish()`
+Доступно только для завершённых резюме (`completed` / `completed_raw`). URL: `/resume/<id>/edit/<step>/`.
+
+- Форма предзаполняется из `section.display_content` (то, что сейчас видит пользователь)
+- Результат сохраняется в `user_content` — имеет наивысший приоритет в `display_content`
+- `step.html` при `is_edit_mode=True`: скрывает прогресс-бар, заменяет «Далее» на «Сохранить изменения», добавляет «← Назад к резюме»
+- В `detail.html` кнопка «Изменить» у каждой секции (включая шапку с контактами)
+- Секция «Опыт работы» отображается всегда, даже если пустая («Опыт работы не указан»)
+
+### Стаж
+
+Вычисляется в `_experience_label(items)` (`views.py`) из `display_content` секции experience. Парсинг дат через `_parse_period_date(text)` — понимает русские названия месяцев и «по настоящее время». Отображается в шапке резюме справа от должности: «Стаж X лет / X года / менее 1 года / 0 лет». При пустой секции — «Стаж 0 лет».
+
+### Баннеры AI на странице резюме
+
+`detail.html` показывает один из двух баннеров над резюме:
+- **`completed`** — зелёная плашка «✓ Улучшено с помощью AI»
+- **`completed_raw`** — оранжевый баннер «AI не смог обработать резюме» + кнопка «Повторно проконсультироваться с AI» → POST `/resume/<id>/retry-ai/`
+
+### Флоу при сбое и повторном запросе AI
+
+Если `polish_resume()` выбросил исключение → `Resume.status = 'completed_raw'`, `ai_content` не пишется.
+
+При повторном прогоне (`resume_retry_ai` → `_run_ai_polish`):
+- `polish_resume` читает `display_content` каждой секции (не `raw_content`) — если пользователь редактировал секцию, AI получает его версию
+- После успеха: `ai_content` обновляется, `user_content` сбрасывается в `None`, `status → completed`
+- После сбоя: `status → completed_raw`, `ai_content` не трогается
 
 ### Claude API — `polish_resume(resume)`
 
-Один запрос на всё резюме. Собирает `raw_content` всех секций, формирует единый промпт с инструкцией перефразировать/улучшить формулировки, сохранить факты. Возвращает JSON вида `{section_type: улучшенный_контент}`. После успеха каждая секция получает `ai_content`.
+Один запрос на всё резюме. Собирает `display_content` всех секций (AI улучшает то, что сейчас видит пользователь), формирует единый промпт, сохранить факты. Возвращает JSON вида `{section_type: улучшенный_контент}`. После успеха каждая секция получает новый `ai_content`, `user_content` обнуляется.
 
 ### Повторяющиеся блоки (JS)
 

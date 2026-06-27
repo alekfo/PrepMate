@@ -1,4 +1,6 @@
 import logging
+import re
+from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -146,8 +148,6 @@ def _validate_step(step, raw_content):
         if not raw_content.get('text'):
             return 'Напишите что-нибудь о себе — AI улучшит формулировки.'
     elif step == 'experience':
-        if not raw_content:
-            return 'Добавьте хотя бы одно место работы.'
         for i, item in enumerate(raw_content, 1):
             if not item.get('company'):
                 return f'Место {i}: укажите название компании.'
@@ -258,7 +258,8 @@ def _run_ai_polish(resume):
             section = resume.get_section(section_type)
             if section:
                 section.ai_content = content
-                section.save(update_fields=['ai_content'])
+                section.user_content = None
+                section.save(update_fields=['ai_content', 'user_content'])
         resume.status = Resume.STATUS_COMPLETED
         resume.save(update_fields=['status', 'updated_at'])
         logger.info("Resume AI polish done: id=%d", resume.id)
@@ -266,6 +267,115 @@ def _run_ai_polish(resume):
         logger.error("Resume AI polish failed: id=%d: %s", resume.id, e)
         resume.status = Resume.STATUS_COMPLETED_RAW
         resume.save(update_fields=['status', 'updated_at'])
+
+
+@login_required
+def resume_edit_section(request, resume_id, step):
+    if not _has_subscription(request.user):
+        return redirect('users:subscription')
+
+    if step not in RESUME_STEPS:
+        return redirect('resumes:list')
+
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+
+    if resume.status == Resume.STATUS_DRAFT:
+        return redirect('resumes:step', resume_id=resume.id, step=step)
+
+    existing_section = resume.get_section(step)
+    existing_content = existing_section.display_content if existing_section else None
+
+    if request.method == 'POST':
+        raw_content = _parse_step_post(request.POST, step)
+        error = _validate_step(step, raw_content)
+        if error:
+            return render(request, 'resumes/step.html', {
+                'resume': resume,
+                'step': step,
+                'step_title': STEP_TITLES[step],
+                'step_index': RESUME_STEPS.index(step),
+                'step_total': len(RESUME_STEPS),
+                'is_last': False,
+                'is_repeating': step in _REPEATING_STEPS,
+                'existing': raw_content,
+                'error': error,
+                'is_edit_mode': True,
+            })
+
+        if existing_section:
+            existing_section.user_content = raw_content
+            existing_section.save(update_fields=['user_content'])
+        else:
+            ResumeSection.objects.create(
+                resume=resume,
+                section_type=step,
+                order=SECTION_ORDER[step],
+                raw_content=raw_content,
+                user_content=raw_content,
+            )
+
+        logger.info("Resume section edited: id=%d step=%s user=%s", resume.id, step, request.user.username)
+        messages.success(request, 'Секция обновлена.')
+        return redirect('resumes:detail', resume_id=resume.id)
+
+    return render(request, 'resumes/step.html', {
+        'resume': resume,
+        'step': step,
+        'step_title': STEP_TITLES[step],
+        'step_index': RESUME_STEPS.index(step),
+        'step_total': len(RESUME_STEPS),
+        'is_last': False,
+        'is_repeating': step in _REPEATING_STEPS,
+        'existing': existing_content,
+        'is_edit_mode': True,
+    })
+
+
+_RU_MONTH_PATTERNS = [
+    (r'январ', 1), (r'феврал', 2), (r'март', 3), (r'апрел', 4),
+    (r'ма[йя]', 5), (r'июн', 6), (r'июл', 7), (r'август', 8),
+    (r'сентябр', 9), (r'октябр', 10), (r'ноябр', 11), (r'декабр', 12),
+]
+
+
+def _parse_period_date(text):
+    if not text:
+        return None
+    t = text.lower()
+    if any(kw in t for kw in ('настоящ', 'н.в', 'present', 'сейчас', 'сих пор')):
+        return date.today()
+    year_m = re.search(r'\b(20\d{2}|19\d{2})\b', t)
+    if not year_m:
+        return None
+    year = int(year_m.group(1))
+    month = 1
+    for pattern, num in _RU_MONTH_PATTERNS:
+        if re.search(pattern, t):
+            month = num
+            break
+    return date(year, month, 1)
+
+
+def _experience_label(items):
+    total = 0
+    for item in items:
+        start = _parse_period_date(item.get('period_start', ''))
+        end = _parse_period_date(item.get('period_end', ''))
+        if start and end and end >= start:
+            total += (end.year - start.year) * 12 + (end.month - start.month)
+    total = max(0, total)
+    years = total // 12
+    if years == 0:
+        return '0 лет' if total == 0 else 'менее 1 года'
+    if 11 <= years % 100 <= 19:
+        suffix = 'лет'
+    elif years % 10 == 1:
+        suffix = 'год'
+    elif 2 <= years % 10 <= 4:
+        suffix = 'года'
+    else:
+        suffix = 'лет'
+    return f'{years} {suffix}'
 
 
 @login_required
@@ -280,8 +390,14 @@ def resume_detail(request, resume_id):
 
     sections = {s.section_type: s for s in resume.sections.all()}
 
+    exp_section = sections.get('experience')
+    exp_items = exp_section.display_content if exp_section else []
+    if not isinstance(exp_items, list):
+        exp_items = []
+
     return render(request, 'resumes/detail.html', {
         'resume': resume,
         'sections': sections,
         'ai_failed': resume.status == Resume.STATUS_COMPLETED_RAW,
+        'experience_label': _experience_label(exp_items),
     })
