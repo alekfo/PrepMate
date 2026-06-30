@@ -5,7 +5,13 @@
 {% block content %}
 <div class="page">
 
-  <a href="{% url 'resumes:list' %}" class="back-link">← Все резюме</a>
+  <div class="resume-topbar">
+    <a href="{% url 'resumes:list' %}" class="back-link">← Все резюме</a>
+    <div class="resume-export-btns">
+      <a href="{% url 'resumes:export_pdf' resume_id=resume.id %}" class="btn btn-secondary resume-export-btn">Скачать PDF</a>
+      <a href="{% url 'resumes:export_docx' resume_id=resume.id %}" class="btn btn-secondary resume-export-btn">Скачать DOCX</a>
+    </div>
+  </div>
 
   {% if ai_failed %}
   <div class="resume-ai-banner resume-ai-banner--failed">
@@ -37,13 +43,20 @@
     {% if s %}
     {% with c=s.display_content %}
     <div class="resume-doc-header">
-      <div class="resume-doc-header-top">
-        <h1 class="resume-doc-name">{{ c.full_name }}</h1>
+      <div class="resume-section-header">
+        <div class="resume-doc-section-title">Контакты</div>
         <a href="{% url 'resumes:edit_section' resume_id=resume.id step='contacts' %}" class="resume-edit-btn">Изменить</a>
       </div>
-      <div class="resume-doc-title-row">
-        <div class="resume-doc-title">{{ resume.profession }}</div>
-        <div class="resume-doc-experience">Стаж {{ experience_label }}</div>
+      <h1 class="resume-doc-name">{{ c.full_name }}</h1>
+      <div class="resume-doc-subtitle">{{ resume.profession }} — стаж {{ experience_label }}</div>
+      <div class="resume-photo-area{% if not resume.photo %} resume-photo-empty{% endif %}" id="photoArea">
+        {% if resume.photo %}
+        <img src="{{ resume.photo.url }}" alt="Фото" class="resume-photo-img">
+        <button class="resume-photo-delete" id="photoDeleteBtn" title="Удалить фото">×</button>
+        {% else %}
+        <span class="resume-photo-icon">+</span>
+        <span class="resume-photo-label">Фото</span>
+        {% endif %}
       </div>
       <div class="resume-doc-contacts">
         {% if c.email %}<span>{{ c.email }}</span>{% endif %}
@@ -52,6 +65,8 @@
         {% if c.linkedin %}<span>{{ c.linkedin }}</span>{% endif %}
         {% if c.github %}<span>{{ c.github }}</span>{% endif %}
       </div>
+      <input type="file" id="photoInput" accept=".jpg,.jpeg,.png,.webp" style="display:none;">
+      <form id="photoCsrfForm" style="display:none;">{% csrf_token %}</form>
     </div>
     {% endwith %}
     {% endif %}
@@ -233,6 +248,73 @@
 {% endif %}
 
 {# ── AI Refine Modal ── #}
+<script>
+(function () {
+  var photoArea   = document.getElementById('photoArea');
+  var photoInput  = document.getElementById('photoInput');
+  if (!photoArea || !photoInput) return;
+
+  var resumeId  = '{{ resume.id }}';
+  var csrfToken = document.querySelector('#photoCsrfForm [name=csrfmiddlewaretoken]').value;
+
+  function setUploading(on) {
+    if (on) photoArea.classList.add('resume-photo-uploading');
+    else photoArea.classList.remove('resume-photo-uploading');
+  }
+
+  function renderPhoto(url) {
+    photoArea.classList.remove('resume-photo-empty');
+    photoArea.innerHTML =
+      '<img src="' + url + '" alt="Фото" class="resume-photo-img">'
+      + '<button class="resume-photo-delete" id="photoDeleteBtn" title="Удалить фото">\xd7</button>';
+    attachDelete();
+  }
+
+  function renderEmpty() {
+    photoArea.classList.add('resume-photo-empty');
+    photoArea.innerHTML =
+      '<span class="resume-photo-icon">+</span>'
+      + '<span class="resume-photo-label">Фото</span>';
+  }
+
+  function attachDelete() {
+    var btn = document.getElementById('photoDeleteBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var fd = new FormData();
+      fd.append('csrfmiddlewaretoken', csrfToken);
+      setUploading(true);
+      fetch('/resume/' + resumeId + '/photo/delete/', { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d.ok) renderEmpty(); })
+        .finally(function () { setUploading(false); });
+    });
+  }
+
+  photoArea.addEventListener('click', function (e) {
+    if (e.target.id === 'photoDeleteBtn') return;
+    photoInput.click();
+  });
+
+  photoInput.addEventListener('change', function () {
+    var file = this.files[0];
+    if (!file) return;
+    var fd = new FormData();
+    fd.append('photo', file);
+    fd.append('csrfmiddlewaretoken', csrfToken);
+    setUploading(true);
+    fetch('/resume/' + resumeId + '/photo/upload/', { method: 'POST', body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (d.url) renderPhoto(d.url); })
+      .finally(function () { setUploading(false); });
+    this.value = '';
+  });
+
+  attachDelete();
+})();
+</script>
+
 {% if request.user.is_premium %}
 <div id="aiRefineOverlay" class="ai-refine-overlay" style="display:none;" role="dialog" aria-modal="true">
   <div class="ai-refine-modal">

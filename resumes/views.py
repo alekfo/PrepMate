@@ -1,12 +1,13 @@
 import json
 import logging
+import os
 import re
 from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .models import Resume, ResumeSection
@@ -351,6 +352,55 @@ def resume_edit_section(request, resume_id, step):
     })
 
 
+_PHOTO_ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+_PHOTO_ALLOWED_CONTENT_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
+_PHOTO_MAX_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+@login_required
+def resume_upload_photo(request, resume_id):
+    if not _has_subscription(request.user):
+        return JsonResponse({'error': 'subscription_required'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'method_not_allowed'}, status=405)
+
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+
+    photo = request.FILES.get('photo')
+    if not photo:
+        return JsonResponse({'error': 'no_file'}, status=400)
+    if photo.size > _PHOTO_MAX_SIZE:
+        return JsonResponse({'error': 'too_large'}, status=400)
+
+    ext = os.path.splitext(photo.name)[1].lower()
+    if ext not in _PHOTO_ALLOWED_EXTENSIONS or photo.content_type not in _PHOTO_ALLOWED_CONTENT_TYPES:
+        return JsonResponse({'error': 'invalid_type'}, status=400)
+
+    if resume.photo:
+        resume.photo.delete(save=False)
+
+    resume.photo = photo
+    resume.save(update_fields=['photo', 'updated_at'])
+    logger.info("Resume photo uploaded: id=%d user=%s", resume.id, request.user.username)
+    return JsonResponse({'url': resume.photo.url})
+
+
+@login_required
+def resume_delete_photo(request, resume_id):
+    if not _has_subscription(request.user):
+        return JsonResponse({'error': 'subscription_required'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'method_not_allowed'}, status=405)
+
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+    if resume.photo:
+        resume.photo.delete(save=False)
+        resume.photo = None
+        resume.save(update_fields=['photo', 'updated_at'])
+        logger.info("Resume photo deleted: id=%d user=%s", resume.id, request.user.username)
+    return JsonResponse({'ok': True})
+
+
 @login_required
 def resume_ai_refine_section(request, resume_id, step):
     if not request.user.is_premium:
@@ -484,3 +534,66 @@ def resume_detail(request, resume_id):
         'experience_label': _experience_label(exp_items),
         'ai_refine_remaining': ai_refine_remaining,
     })
+
+
+@login_required
+def resume_export_pdf(request, resume_id):
+    if not _has_subscription(request.user):
+        return redirect('users:subscription')
+
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+
+    if resume.status == Resume.STATUS_DRAFT:
+        return redirect('resumes:step', resume_id=resume.id, step='contacts')
+
+    sections = {s.section_type: s for s in resume.sections.all()}
+    exp_section = sections.get('experience')
+    exp_items = exp_section.display_content if exp_section else []
+    if not isinstance(exp_items, list):
+        exp_items = []
+
+    from .export import generate_pdf
+    try:
+        pdf_bytes = generate_pdf(resume, sections, _experience_label(exp_items))
+    except Exception as e:
+        logger.error("PDF export failed: resume_id=%d: %s", resume.id, e)
+        messages.error(request, 'Не удалось сформировать PDF. Попробуйте позже.')
+        return redirect('resumes:detail', resume_id=resume.id)
+
+    safe_name = re.sub(r'[^\w\-]', '_', resume.profession)[:40]
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="resume_{safe_name}.pdf"'
+    return response
+
+
+@login_required
+def resume_export_docx(request, resume_id):
+    if not _has_subscription(request.user):
+        return redirect('users:subscription')
+
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+
+    if resume.status == Resume.STATUS_DRAFT:
+        return redirect('resumes:step', resume_id=resume.id, step='contacts')
+
+    sections = {s.section_type: s for s in resume.sections.all()}
+    exp_section = sections.get('experience')
+    exp_items = exp_section.display_content if exp_section else []
+    if not isinstance(exp_items, list):
+        exp_items = []
+
+    from .export import generate_docx
+    try:
+        docx_bytes = generate_docx(resume, sections, _experience_label(exp_items))
+    except Exception as e:
+        logger.error("DOCX export failed: resume_id=%d: %s", resume.id, e)
+        messages.error(request, 'Не удалось сформировать DOCX. Попробуйте позже.')
+        return redirect('resumes:detail', resume_id=resume.id)
+
+    safe_name = re.sub(r'[^\w\-]', '_', resume.profession)[:40]
+    response = HttpResponse(
+        docx_bytes,
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+    response['Content-Disposition'] = f'attachment; filename="resume_{safe_name}.docx"'
+    return response

@@ -1577,11 +1577,29 @@ footer a:hover {
   font-size: 13.5px;
   color: var(--text-secondary);
   text-decoration: none;
-  margin-bottom: 24px;
   transition: color 0.15s;
 }
 
 .back-link:hover { color: var(--text); }
+
+.resume-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 12px;
+}
+
+.resume-export-btns {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.resume-export-btn {
+  font-size: 13px;
+  padding: 6px 14px;
+}
 
 .stat-vacancy-header { margin-bottom: 28px; }
 .stat-vacancy-header h1 { margin-bottom: 4px; }
@@ -2303,10 +2321,16 @@ footer a:hover {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 4px;
+  margin-bottom: 18px;
 }
 
-.resume-doc-header-top .resume-doc-name {
+.resume-doc-header-identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.resume-doc-header-identity .resume-doc-name {
   margin-bottom: 0;
 }
 
@@ -2314,7 +2338,9 @@ footer a:hover {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid var(--text);
 }
 
 .resume-section-header .resume-doc-section-title {
@@ -2373,7 +2399,7 @@ footer a:hover {
 }
 
 .resume-doc-section {
-  padding: 24px 36px;
+  padding: 28px 36px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -2382,11 +2408,11 @@ footer a:hover {
 }
 
 .resume-doc-section-title {
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--text);
   margin-bottom: 14px;
 }
 
@@ -2618,6 +2644,90 @@ footer a:hover {
   }
 }
 
+/* ── Resume photo ── */
+.resume-doc-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+  margin-bottom: 16px;
+}
+
+.resume-photo-area {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  min-width: 120px;
+  min-height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.resume-photo-empty {
+  border: 2px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.resume-photo-empty:hover {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+.resume-photo-icon {
+  font-size: 22px;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+
+.resume-photo-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 5px;
+  letter-spacing: 0.2px;
+}
+
+.resume-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.resume-photo-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 26px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0;
+}
+
+.resume-photo-area:hover .resume-photo-delete {
+  opacity: 1;
+}
+
+.resume-photo-uploading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 /* ── Resume section action buttons ── */
 .resume-section-actions {
   display: flex;
@@ -2810,5 +2920,9 @@ footer a:hover {
   }
   .resume-section-actions {
     gap: 5px;
+  }
+  .resume-photo-area {
+    width: 80px;
+    height: 80px;
   }
 }

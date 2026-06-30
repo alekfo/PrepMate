@@ -13,6 +13,7 @@ services:
     build: .
     volumes:
       - static_files:/app/staticfiles
+      - media_files:/app/media
     env_file:
       - .env
     depends_on:
@@ -27,6 +28,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - static_files:/static
+      - media_files:/media
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - web
@@ -35,3 +37,4 @@ services:
 volumes:
   postgres_data:
   static_files:
+  media_files:
