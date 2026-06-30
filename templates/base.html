@@ -31,6 +31,7 @@
         <a href="{% url 'interviews:history' %}" class="nav-dropdown-item">История</a>
         <a href="{% url 'interviews:statistics' %}" class="nav-dropdown-item">Менторство от AI</a>
         <a href="{% url 'interviews:flashcards' %}" class="nav-dropdown-item">Флэш-карточки</a>
+        <a href="{% url 'resumes:list' %}" class="nav-dropdown-item">Резюме</a>
         <a href="{% url 'users:settings' %}" class="nav-dropdown-item">Настройки</a>
         <a href="{% url 'users:about' %}" class="nav-dropdown-item">О проекте</a>
       </div>
@@ -85,6 +86,18 @@
       {% endfor %}
     </ul>
   </div>
+  <script>
+    document.querySelectorAll('.message:not(.error)').forEach(function(el) {
+      setTimeout(function() {
+        el.style.transition = 'opacity 0.5s, max-height 0.5s, padding 0.5s, margin 0.5s';
+        el.style.overflow = 'hidden';
+        el.style.opacity = '0';
+        el.style.maxHeight = '0';
+        el.style.padding = '0';
+        el.style.marginBottom = '0';
+      }, 3000);
+    });
+  </script>
 {% endif %}
 
 {% block content %}{% endblock %}

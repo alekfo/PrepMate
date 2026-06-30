@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block title %}{{ step_title }} — Резюме — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  {% if is_edit_mode %}
+  <a href="{% url 'resumes:detail' resume_id=resume.id %}" class="back-link">← Назад к резюме</a>
+  {% else %}
+  <div class="progress-header">
+    <div class="progress-meta">
+      <span class="progress-session">{{ resume.profession }}</span>
+      <span class="progress-count">{{ step_index|add:1 }} / {{ step_total }}</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" style="width: {% widthratio step_index|add:1 step_total 100 %}%"></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <h1>{{ step_title }}</h1>
+
+  <form method="post" id="stepForm">
+    {% csrf_token %}
+
+    {# ── Contacts ── #}
+    {% if step == 'contacts' %}
+    <div class="resume-fields">
+      <div class="form-group">
+        <label for="full_name">Полное имя</label>
+        <input type="text" id="full_name" name="full_name" placeholder="Иванов Иван Иванович" value="{{ existing.full_name|default:'' }}">
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="text" id="email" name="email" placeholder="ivan@example.com" value="{{ existing.email|default:'' }}">
+      </div>
+      <div class="form-group">
+        <label for="phone">Телефон</label>
+        <input type="text" id="phone" name="phone" placeholder="+7 (999) 123-45-67" value="{{ existing.phone|default:'' }}">
+      </div>
+      <div class="form-group">
+        <label for="city">Город</label>
+        <input type="text" id="city" name="city" placeholder="Москва / Готов к переезду / Удалённо" value="{{ existing.city|default:'' }}">
+      </div>
+      <div class="form-group">
+        <label for="linkedin">LinkedIn <span class="field-optional">(необязательно)</span></label>
+        <input type="text" id="linkedin" name="linkedin" placeholder="linkedin.com/in/yourname" value="{{ existing.linkedin|default:'' }}">
+      </div>
+      <div class="form-group">
+        <label for="github">GitHub / Портфолио <span class="field-optional">(необязательно)</span></label>
+        <input type="text" id="github" name="github" placeholder="github.com/yourname" value="{{ existing.github|default:'' }}">
+      </div>
+    </div>
+
+    {# ── Summary ── #}
+    {% elif step == 'summary' %}
+    <div class="resume-fields">
+      <div class="form-group">
+        <label for="text">Расскажите о себе</label>
+        <p class="field-hint">Напишите в свободной форме — кто вы, чем занимаетесь, что умеете. AI улучшит формулировки и сделает текст профессиональным.</p>
+        <textarea id="text" name="text" rows="6" placeholder="Разрабатываю бэкенд на Python уже 4 года. Работал в стартапах, знаю Django и FastAPI. Люблю писать чистый код и решать сложные задачи...">{{ existing.text|default:'' }}</textarea>
+      </div>
+    </div>
+
+    {# ── Experience ── #}
+    {% elif step == 'experience' %}
+    {% if not is_edit_mode %}
+    <p class="field-hint" style="margin-bottom: 20px;">Если опыта работы нет — оставьте форму пустой и нажмите «Далее».</p>
+    {% endif %}
+    <div id="repeating-container">
+      {% if existing %}
+        {% for item in existing %}
+        <div class="repeating-item" data-index="{{ forloop.counter0 }}">
+          <div class="repeating-item-header">
+            <span class="repeating-item-num">Место {{ forloop.counter }}</span>
+            {% if not forloop.first %}<button type="button" class="remove-item-btn" onclick="removeItem(this)">Удалить</button>{% endif %}
+          </div>
+          <div class="form-group">
+            <label>Компания</label>
+            <input type="text" name="company-{{ forloop.counter0 }}" placeholder="ООО Пример, Яндекс, Freelance..." value="{{ item.company }}">
+          </div>
+          <div class="form-group">
+            <label>Должность</label>
+            <input type="text" name="position-{{ forloop.counter0 }}" placeholder="Python Developer, Старший аналитик..." value="{{ item.position }}">
+          </div>
+          <div class="period-row">
+            <div class="form-group">
+              <label>С (месяц, год)</label>
+              <input type="text" name="period_start-{{ forloop.counter0 }}" placeholder="Март 2021" value="{{ item.period_start }}">
+            </div>
+            <div class="form-group">
+              <label>По</label>
+              <input type="text" name="period_end-{{ forloop.counter0 }}" placeholder="Февраль 2024 / по настоящее время" value="{{ item.period_end }}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Ключевые обязанности</label>
+            <p class="field-hint">Что делали: разрабатывал API, вёл аналитику, управлял командой... AI улучшит формулировки.</p>
+            <textarea name="responsibilities-{{ forloop.counter0 }}" rows="3" placeholder="Разрабатывал REST API на Django, писал юнит-тесты, участвовал в код-ревью...">{{ item.responsibilities }}</textarea>
+          </div>
+          <div class="form-group">
+            <label>Достижения <span class="field-optional">(необязательно)</span></label>
+            <p class="field-hint">Что улучшили, запустили, ускорили — конкретные результаты.</p>
+            <textarea name="achievements-{{ forloop.counter0 }}" rows="2" placeholder="Ускорил загрузку страницы на 40%, запустил новый модуль, который...">{{ item.achievements }}</textarea>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="repeating-item" data-index="0">
+          <div class="repeating-item-header">
+            <span class="repeating-item-num">Место 1</span>
+          </div>
+          <div class="form-group">
+            <label>Компания</label>
+            <input type="text" name="company-0" placeholder="ООО Пример, Яндекс, Freelance...">
+          </div>
+          <div class="form-group">
+            <label>Должность</label>
+            <input type="text" name="position-0" placeholder="Python Developer, Старший аналитик...">
+          </div>
+          <div class="period-row">
+            <div class="form-group">
+              <label>С (месяц, год)</label>
+              <input type="text" name="period_start-0" placeholder="Март 2021">
+            </div>
+            <div class="form-group">
+              <label>По</label>
+              <input type="text" name="period_end-0" placeholder="Февраль 2024 / по настоящее время">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Ключевые обязанности</label>
+            <p class="field-hint">Что делали: разрабатывал API, вёл аналитику, управлял командой... AI улучшит формулировки.</p>
+            <textarea name="responsibilities-0" rows="3" placeholder="Разрабатывал REST API на Django, писал юнит-тесты, участвовал в код-ревью..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Достижения <span class="field-optional">(необязательно)</span></label>
+            <p class="field-hint">Что улучшили, запустили, ускорили — конкретные результаты.</p>
+            <textarea name="achievements-0" rows="2" placeholder="Ускорил загрузку страницы на 40%, запустил новый модуль, который..."></textarea>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+    <button type="button" class="btn btn-secondary add-item-btn" id="addItemBtn">+ Добавить место работы</button>
+
+    {# ── Education ── #}
+    {% elif step == 'education' %}
+    <div id="repeating-container">
+      {% if existing %}
+        {% for item in existing %}
+        <div class="repeating-item" data-index="{{ forloop.counter0 }}">
+          <div class="repeating-item-header">
+            <span class="repeating-item-num">Место {{ forloop.counter }}</span>
+            {% if not forloop.first %}<button type="button" class="remove-item-btn" onclick="removeItem(this)">Удалить</button>{% endif %}
+          </div>
+          <div class="form-group">
+            <label>Учебное заведение</label>
+            <input type="text" name="institution-{{ forloop.counter0 }}" placeholder="МГУ, Яндекс Практикум, Coursera..." value="{{ item.institution }}">
+          </div>
+          <div class="form-group">
+            <label>Специальность / Направление</label>
+            <input type="text" name="specialty-{{ forloop.counter0 }}" placeholder="Прикладная математика, Веб-разработка..." value="{{ item.specialty }}">
+          </div>
+          <div class="form-group">
+            <label>Степень / Тип</label>
+            <input type="text" name="degree-{{ forloop.counter0 }}" placeholder="Бакалавр / Магистр / Курс / Специалист" value="{{ item.degree }}">
+          </div>
+          <div class="form-group">
+            <label>Год окончания</label>
+            <input type="text" name="year-{{ forloop.counter0 }}" placeholder="2020 / учусь сейчас" value="{{ item.year }}">
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="repeating-item" data-index="0">
+          <div class="repeating-item-header">
+            <span class="repeating-item-num">Учёба 1</span>
+          </div>
+          <div class="form-group">
+            <label>Учебное заведение</label>
+            <input type="text" name="institution-0" placeholder="МГУ, Яндекс Практикум, Coursera...">
+          </div>
+          <div class="form-group">
+            <label>Специальность / Направление</label>
+            <input type="text" name="specialty-0" placeholder="Прикладная математика, Веб-разработка...">
+          </div>
+          <div class="form-group">
+            <label>Степень / Тип</label>
+            <input type="text" name="degree-0" placeholder="Бакалавр / Магистр / Курс / Специалист">
+          </div>
+          <div class="form-group">
+            <label>Год окончания</label>
+            <input type="text" name="year-0" placeholder="2020 / учусь сейчас">
+          </div>
+        </div>
+      {% endif %}
+    </div>
+    <button type="button" class="btn btn-secondary add-item-btn" id="addItemBtn">+ Добавить учёбу</button>
+
+    {# ── Skills ── #}
+    {% elif step == 'skills' %}
+    <div class="resume-fields">
+      <div class="form-group">
+        <label for="hard_skills">Профессиональные навыки</label>
+        <p class="field-hint">Технологии, инструменты, языки программирования — перечислите через запятую.</p>
+        <textarea id="hard_skills" name="hard_skills" rows="4" placeholder="Python, Django, PostgreSQL, Docker, Git, REST API, Redis...">{{ existing.hard_skills|default:'' }}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="soft_skills">Личные качества <span class="field-optional">(необязательно)</span></label>
+        <p class="field-hint">Командная работа, управление временем, коммуникация...</p>
+        <textarea id="soft_skills" name="soft_skills" rows="3" placeholder="Командная работа, ответственность, умение работать в условиях неопределённости...">{{ existing.soft_skills|default:'' }}</textarea>
+      </div>
+    </div>
+
+    {# ── Languages ── #}
+    {% elif step == 'languages' %}
+    <div id="repeating-container">
+      {% if existing %}
+        {% for item in existing %}
+        <div class="repeating-item repeating-item--inline" data-index="{{ forloop.counter0 }}">
+          <div class="form-group">
+            <label>Язык</label>
+            <input type="text" name="language-{{ forloop.counter0 }}" placeholder="Английский" value="{{ item.language }}">
+          </div>
+          <div class="form-group">
+            <label>Уровень</label>
+            <input type="text" name="level-{{ forloop.counter0 }}" placeholder="B2 / Intermediate / Родной" value="{{ item.level }}">
+          </div>
+          {% if not forloop.first %}<button type="button" class="remove-item-btn remove-item-btn--inline" onclick="removeItem(this)">Удалить</button>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="repeating-item repeating-item--inline" data-index="0">
+          <div class="form-group">
+            <label>Язык</label>
+            <input type="text" name="language-0" placeholder="Английский">
+          </div>
+          <div class="form-group">
+            <label>Уровень</label>
+            <input type="text" name="level-0" placeholder="B2 / Intermediate / Родной">
+          </div>
+        </div>
+      {% endif %}
+    </div>
+    <button type="button" class="btn btn-secondary add-item-btn" id="addItemBtn">+ Добавить язык</button>
+
+    {# ── Certifications ── #}
+    {% elif step == 'certifications' %}
+    <p class="field-hint" style="margin-bottom: 24px;">Курсы, сертификаты, онлайн-программы. Если нечего добавить — нажмите «Пропустить».</p>
+    <div id="repeating-container">
+      {% if existing %}
+        {% for item in existing %}
+        <div class="repeating-item" data-index="{{ forloop.counter0 }}">
+          <div class="repeating-item-header">
+            <span class="repeating-item-num">Курс {{ forloop.counter }}</span>
+            {% if not forloop.first %}<button type="button" class="remove-item-btn" onclick="removeItem(this)">Удалить</button>{% endif %}
+          </div>
+          <div class="form-group">
+            <label>Название курса / сертификата</label>
+            <input type="text" name="name-{{ forloop.counter0 }}" placeholder="Machine Learning Specialization" value="{{ item.name }}">
+          </div>
+          <div class="form-group">
+            <label>Платформа / Организация</label>
+            <input type="text" name="platform-{{ forloop.counter0 }}" placeholder="Coursera, Яндекс Практикум, Stepik..." value="{{ item.platform }}">
+          </div>
+          <div class="form-group">
+            <label>Год</label>
+            <input type="text" name="year-{{ forloop.counter0 }}" placeholder="2023" value="{{ item.year }}">
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="repeating-item" data-index="0">
+          <div class="repeating-item-header">
+            <span class="repeating-item-num">Курс 1</span>
+          </div>
+          <div class="form-group">
+            <label>Название курса / сертификата</label>
+            <input type="text" name="name-0" placeholder="Machine Learning Specialization">
+          </div>
+          <div class="form-group">
+            <label>Платформа / Организация</label>
+            <input type="text" name="platform-0" placeholder="Coursera, Яндекс Практикум, Stepik...">
+          </div>
+          <div class="form-group">
+            <label>Год</label>
+            <input type="text" name="year-0" placeholder="2023">
+          </div>
+        </div>
+      {% endif %}
+    </div>
+    <button type="button" class="btn btn-secondary add-item-btn" id="addItemBtn">+ Добавить курс</button>
+    {% endif %}
+
+    {% if error %}
+    <p class="error-text" style="margin-top: 16px;">{{ error }}</p>
+    {% endif %}
+
+    <div class="step-actions">
+      {% if is_edit_mode %}
+        <a href="{% url 'resumes:detail' resume_id=resume.id %}" class="btn btn-secondary" style="margin-top: 0;">Отмена</a>
+        <button type="submit" class="btn" style="margin-top: 0;">Сохранить изменения</button>
+      {% else %}
+        {% if prev_step %}
+        <a href="{% url 'resumes:step' resume_id=resume.id step=prev_step %}" class="btn btn-secondary" style="margin-top: 0;">← Назад</a>
+        {% endif %}
+        {% if is_last %}
+          <button type="submit" class="btn" id="submitBtn" style="margin-top: 0;">Сохранить и составить резюме</button>
+          <button type="submit" name="action" value="skip" form="stepForm" class="btn btn-secondary" id="skipBtn" style="margin-top: 0;">Пропустить этот раздел</button>
+        {% else %}
+          <button type="submit" class="btn" id="submitBtn" style="margin-top: 0;">Далее →</button>
+        {% endif %}
+      {% endif %}
+    </div>
+
+  </form>
+</div>
+
+{% if is_repeating %}
+<script>
+  (function () {
+    var container = document.getElementById('repeating-container');
+    var addBtn = document.getElementById('addItemBtn');
+    if (!addBtn) return;
+
+    function getCount() {
+      return container.querySelectorAll('.repeating-item').length;
+    }
+
+    function makeRemoveBtn() {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'remove-item-btn';
+      btn.textContent = 'Удалить';
+      btn.addEventListener('click', function () { removeItem(btn); });
+      return btn;
+    }
+
+    addBtn.addEventListener('click', function () {
+      var idx = getCount();
+      var template = container.querySelector('.repeating-item');
+      var clone = template.cloneNode(true);
+      clone.setAttribute('data-index', idx);
+
+      var numEl = clone.querySelector('.repeating-item-num');
+      if (numEl) numEl.textContent = numEl.textContent.replace(/\d+$/, idx + 1);
+
+      clone.querySelectorAll('input, textarea').forEach(function (el) {
+        el.name = el.name.replace(/-\d+$/, '-' + idx);
+        el.value = '';
+      });
+
+      // Re-wire existing remove buttons
+      clone.querySelectorAll('.remove-item-btn').forEach(function (b) {
+        b.addEventListener('click', function () { removeItem(b); });
+      });
+
+      var header = clone.querySelector('.repeating-item-header');
+      if (header) {
+        if (!clone.querySelector('.remove-item-btn')) {
+          header.appendChild(makeRemoveBtn());
+        }
+      } else {
+        // Inline item (e.g. languages) — append remove button spanning both columns
+        if (!clone.querySelector('.remove-item-btn')) {
+          var rb = makeRemoveBtn();
+          rb.className = 'remove-item-btn remove-item-btn--inline';
+          clone.appendChild(rb);
+        }
+      }
+
+      container.appendChild(clone);
+    });
+  })();
+
+  function removeItem(btn) {
+    var item = btn.closest('.repeating-item');
+    var container = document.getElementById('repeating-container');
+    if (container.querySelectorAll('.repeating-item').length <= 1) return;
+    item.remove();
+    container.querySelectorAll('.repeating-item').forEach(function (el, i) {
+      el.setAttribute('data-index', i);
+      el.querySelectorAll('input, textarea').forEach(function (input) {
+        input.name = input.name.replace(/-\d+$/, '-' + i);
+      });
+      var numEl = el.querySelector('.repeating-item-num');
+      if (numEl) numEl.textContent = numEl.textContent.replace(/\d+$/, i + 1);
+    });
+  }
+</script>
+{% endif %}
+
+{% if is_last %}
+<script>
+  var resumePhrases = [
+    'Собираем данные резюме...',
+    'Передаём информацию AI...',
+    'AI изучает ваш опыт...',
+    'Улучшаем формулировки...',
+    'Структурируем навыки и достижения...',
+    'Полируем текст о себе...',
+    'Почти готово...',
+  ];
+  document.getElementById('submitBtn').addEventListener('click', function () {
+    activateSpinner(resumePhrases);
+  });
+  var skipBtn = document.getElementById('skipBtn');
+  if (skipBtn) skipBtn.addEventListener('click', function () {
+    activateSpinner(resumePhrases);
+  });
+</script>
+{% endif %}
+{% endblock %}
