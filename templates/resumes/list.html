@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Резюме — PrepStats{% endblock %}
+
+{% block content %}
+<div class="page">
+  <h1>Резюме</h1>
+  <p class="subtitle">Составьте профессиональное резюме с помощью AI</p>
+
+  <form method="post" action="{% url 'resumes:new' %}" class="form-card" style="margin-bottom: 32px;">
+    {% csrf_token %}
+    <label class="form-card-label" for="profession">Целевая должность</label>
+    <input
+      type="text"
+      id="profession"
+      name="profession"
+      placeholder="Python Developer, Product Manager, UX Designer..."
+      required
+      maxlength="200"
+    >
+    <button type="submit" class="btn">Составить новое резюме</button>
+  </form>
+
+  {% if drafts %}
+  <div style="margin-bottom: 32px;">
+    <h2>Незавершённые</h2>
+    <div class="resume-list">
+      {% for r in drafts %}
+      <a href="{% url 'resumes:step' resume_id=r.id step='contacts' %}" class="resume-item resume-item--draft">
+        <div class="resume-item-main">
+          <div class="resume-item-title">{{ r.profession }}</div>
+          <div class="resume-item-date">Начато {{ r.created_at|date:"d.m.Y" }}</div>
+        </div>
+        <span class="badge">Черновик</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if resumes %}
+  <h2>Готовые резюме</h2>
+  <div class="resume-list">
+    {% for r in resumes %}
+    <a href="{% url 'resumes:detail' resume_id=r.id %}" class="resume-item">
+      <div class="resume-item-main">
+        <div class="resume-item-title">{{ r.profession }}</div>
+        <div class="resume-item-date">{{ r.created_at|date:"d.m.Y" }}</div>
+      </div>
+      {% if r.status == 'completed_raw' %}
+        <span class="badge resume-item-badge--raw">Без AI</span>
+      {% else %}
+        <span class="badge resume-item-badge--done">Готово</span>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% elif not drafts %}
+  <div class="paywall-card" style="margin-top: 16px;">
+    <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 0;">
+      Резюме ещё не составлены. Заполните форму выше, чтобы начать.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
