@@ -1,13 +1,16 @@
+import json
 import logging
 import re
 from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .models import Resume, ResumeSection
-from .services import polish_resume
+from .services import polish_resume, refine_section
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,23 @@ _REPEATING_STEPS = {'experience', 'education', 'languages', 'certifications'}
 
 def _has_subscription(user):
     return user.is_subscribed or user.is_premium
+
+
+_AI_REFINE_SECTIONS = {'summary', 'experience', 'education', 'skills', 'certifications'}
+_AI_REFINE_CACHE_PREFIX = 'resume_ai_uses'
+_AI_REFINE_LIST_SECTIONS = {'experience', 'education', 'certifications'}
+
+
+def _ai_refine_uses_today(user):
+    key = f'{_AI_REFINE_CACHE_PREFIX}_{user.id}_{date.today()}'
+    return cache.get(key, 0)
+
+
+def _ai_refine_increment(user):
+    key = f'{_AI_REFINE_CACHE_PREFIX}_{user.id}_{date.today()}'
+    used = cache.get(key, 0) + 1
+    cache.set(key, used, timeout=86400)
+    return used
 
 
 @login_required
@@ -331,6 +351,66 @@ def resume_edit_section(request, resume_id, step):
     })
 
 
+@login_required
+def resume_ai_refine_section(request, resume_id, step):
+    if not request.user.is_premium:
+        return JsonResponse({'error': 'premium_required'}, status=403)
+    if step not in _AI_REFINE_SECTIONS:
+        return JsonResponse({'error': 'not_supported'}, status=400)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'method_not_allowed'}, status=405)
+
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+    section = get_object_or_404(ResumeSection, resume=resume, section_type=step)
+
+    limit = request.user.interviews_limit_per_day
+    used_today = _ai_refine_uses_today(request.user)
+    if used_today >= limit:
+        return JsonResponse({'error': 'limit_reached', 'limit': limit}, status=429)
+
+    wish = request.POST.get('wish', '').strip()[:500]
+
+    try:
+        content = refine_section(section, wish, resume.profession)
+    except Exception as e:
+        logger.error("AI section refine failed: resume_id=%d step=%s: %s", resume_id, step, e)
+        return JsonResponse({'error': 'ai_failed'}, status=500)
+
+    used = _ai_refine_increment(request.user)
+    remaining = max(0, limit - used)
+    return JsonResponse({'content': content, 'remaining': remaining})
+
+
+@login_required
+def resume_ai_accept_section(request, resume_id, step):
+    if not request.user.is_premium:
+        return redirect('users:subscription')
+    if step not in _AI_REFINE_SECTIONS or request.method != 'POST':
+        return redirect('resumes:detail', resume_id=resume_id)
+
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+    section = get_object_or_404(ResumeSection, resume=resume, section_type=step)
+
+    try:
+        content = json.loads(request.POST.get('content', ''))
+    except (ValueError, TypeError):
+        messages.error(request, 'Ошибка при сохранении. Попробуйте ещё раз.')
+        return redirect('resumes:detail', resume_id=resume_id)
+
+    expected_type = list if step in _AI_REFINE_LIST_SECTIONS else dict
+    if not isinstance(content, expected_type):
+        messages.error(request, 'Ошибка формата данных.')
+        return redirect('resumes:detail', resume_id=resume_id)
+
+    section.ai_content = content
+    section.user_content = None
+    section.save(update_fields=['ai_content', 'user_content'])
+
+    logger.info("AI section accepted: resume_id=%d step=%s user=%s", resume_id, step, request.user.username)
+    messages.success(request, 'Секция обновлена с помощью AI.')
+    return redirect('resumes:detail', resume_id=resume_id)
+
+
 _RU_MONTH_PATTERNS = [
     (r'январ', 1), (r'феврал', 2), (r'март', 3), (r'апрел', 4),
     (r'ма[йя]', 5), (r'июн', 6), (r'июл', 7), (r'август', 8),
@@ -395,9 +475,12 @@ def resume_detail(request, resume_id):
     if not isinstance(exp_items, list):
         exp_items = []
 
+    ai_refine_remaining = max(0, request.user.interviews_limit_per_day - _ai_refine_uses_today(request.user))
+
     return render(request, 'resumes/detail.html', {
         'resume': resume,
         'sections': sections,
         'ai_failed': resume.status == Resume.STATUS_COMPLETED_RAW,
         'experience_label': _experience_label(exp_items),
+        'ai_refine_remaining': ai_refine_remaining,
     })

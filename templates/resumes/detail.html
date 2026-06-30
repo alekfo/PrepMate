@@ -65,7 +65,10 @@
     <div class="resume-doc-section">
       <div class="resume-section-header">
         <div class="resume-doc-section-title">О себе</div>
-        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='summary' %}" class="resume-edit-btn">Изменить</a>
+        <div class="resume-section-actions">
+          {% if request.user.is_premium %}<button class="resume-ai-btn" data-step="summary">Улучшить с AI</button>{% else %}<a href="{% url 'users:subscription' %}" class="resume-ai-btn resume-ai-btn--locked">Улучшить с AI</a>{% endif %}
+          <a href="{% url 'resumes:edit_section' resume_id=resume.id step='summary' %}" class="resume-edit-btn">Изменить</a>
+        </div>
       </div>
       <p class="resume-doc-text">{{ c.text }}</p>
     </div>
@@ -78,7 +81,10 @@
     <div class="resume-doc-section">
       <div class="resume-section-header">
         <div class="resume-doc-section-title">Опыт работы</div>
-        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='experience' %}" class="resume-edit-btn">Изменить</a>
+        <div class="resume-section-actions">
+          {% if request.user.is_premium %}<button class="resume-ai-btn" data-step="experience">Улучшить с AI</button>{% else %}<a href="{% url 'users:subscription' %}" class="resume-ai-btn resume-ai-btn--locked">Улучшить с AI</a>{% endif %}
+          <a href="{% url 'resumes:edit_section' resume_id=resume.id step='experience' %}" class="resume-edit-btn">Изменить</a>
+        </div>
       </div>
       {% with s=sections.experience %}
       {% if s and s.display_content %}
@@ -113,7 +119,10 @@
     <div class="resume-doc-section">
       <div class="resume-section-header">
         <div class="resume-doc-section-title">Образование</div>
-        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='education' %}" class="resume-edit-btn">Изменить</a>
+        <div class="resume-section-actions">
+          {% if request.user.is_premium %}<button class="resume-ai-btn" data-step="education">Улучшить с AI</button>{% else %}<a href="{% url 'users:subscription' %}" class="resume-ai-btn resume-ai-btn--locked">Улучшить с AI</a>{% endif %}
+          <a href="{% url 'resumes:edit_section' resume_id=resume.id step='education' %}" class="resume-edit-btn">Изменить</a>
+        </div>
       </div>
       {% for item in items %}
       <div class="resume-edu-item">
@@ -140,7 +149,10 @@
     <div class="resume-doc-section">
       <div class="resume-section-header">
         <div class="resume-doc-section-title">Навыки</div>
-        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='skills' %}" class="resume-edit-btn">Изменить</a>
+        <div class="resume-section-actions">
+          {% if request.user.is_premium %}<button class="resume-ai-btn" data-step="skills">Улучшить с AI</button>{% else %}<a href="{% url 'users:subscription' %}" class="resume-ai-btn resume-ai-btn--locked">Улучшить с AI</a>{% endif %}
+          <a href="{% url 'resumes:edit_section' resume_id=resume.id step='skills' %}" class="resume-edit-btn">Изменить</a>
+        </div>
       </div>
       {% if c.hard_skills %}
       <p class="resume-doc-text"><strong>Профессиональные:</strong> {{ c.hard_skills }}</p>
@@ -183,7 +195,10 @@
     <div class="resume-doc-section">
       <div class="resume-section-header">
         <div class="resume-doc-section-title">Курсы и сертификаты</div>
-        <a href="{% url 'resumes:edit_section' resume_id=resume.id step='certifications' %}" class="resume-edit-btn">Изменить</a>
+        <div class="resume-section-actions">
+          {% if request.user.is_premium %}<button class="resume-ai-btn" data-step="certifications">Улучшить с AI</button>{% else %}<a href="{% url 'users:subscription' %}" class="resume-ai-btn resume-ai-btn--locked">Улучшить с AI</a>{% endif %}
+          <a href="{% url 'resumes:edit_section' resume_id=resume.id step='certifications' %}" class="resume-edit-btn">Изменить</a>
+        </div>
       </div>
       {% for item in items %}
       {% if item.name %}
@@ -214,6 +229,200 @@
       'Почти готово...',
     ]);
   });
+</script>
+{% endif %}
+
+{# ── AI Refine Modal ── #}
+{% if request.user.is_premium %}
+<div id="aiRefineOverlay" class="ai-refine-overlay" style="display:none;" role="dialog" aria-modal="true">
+  <div class="ai-refine-modal">
+
+    <div id="aiRefineInputState">
+      <div class="ai-refine-title">Улучшить раздел с AI</div>
+      <div class="ai-refine-desc">AI доработает текущий текст раздела, сохранив все ваши данные. При желании укажите дополнительные пожелания.</div>
+      <div id="aiRefineError" class="ai-refine-error"></div>
+      <textarea id="aiRefineWish" class="ai-refine-wish" maxlength="500" placeholder="Например: сделай более профессионально, сделай акцент на лидерских качествах…"></textarea>
+      <div class="ai-refine-counter"><span id="aiWishCount">0</span>/500 · Осталось доработок сегодня: <span id="aiRefineRemaining">{{ ai_refine_remaining }}</span></div>
+      <div class="ai-refine-actions">
+        <button id="aiRefineSendBtn" class="btn">Отправить на доработку</button>
+        <button id="aiRefineCancelBtn" class="btn btn-secondary">Отмена</button>
+      </div>
+    </div>
+
+    <div id="aiRefineLoadingState" style="display:none;" class="ai-refine-loading">
+      <div class="ai-refine-title">Обрабатываем…</div>
+      <div class="ai-refine-dots"><span></span><span></span><span></span></div>
+      <div class="ai-refine-desc">AI улучшает формулировки, не меняя ваши данные</div>
+    </div>
+
+    <div id="aiRefineResultState" style="display:none;">
+      <div class="ai-refine-title">Результат AI-доработки</div>
+      <div id="aiRefinePreview" class="ai-refine-preview"></div>
+      <div class="ai-refine-actions">
+        <form id="aiAcceptForm" method="post" action="">
+          {% csrf_token %}
+          <input type="hidden" name="content" id="aiAcceptContent">
+          <button type="submit" class="btn">Принять</button>
+        </form>
+        <button id="aiRefineAgainBtn" class="btn btn-secondary">Отправить ещё раз</button>
+        <button id="aiRefineCloseBtn" class="btn btn-secondary">Отменить</button>
+      </div>
+      <div class="ai-refine-remaining-note">Осталось доработок сегодня: <span id="aiRefineRemainingResult">{{ ai_refine_remaining }}</span></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  var overlay       = document.getElementById('aiRefineOverlay');
+  var inputState    = document.getElementById('aiRefineInputState');
+  var loadingState  = document.getElementById('aiRefineLoadingState');
+  var resultState   = document.getElementById('aiRefineResultState');
+  var wishEl        = document.getElementById('aiRefineWish');
+  var wishCountEl   = document.getElementById('aiWishCount');
+  var sendBtn       = document.getElementById('aiRefineSendBtn');
+  var cancelBtn     = document.getElementById('aiRefineCancelBtn');
+  var againBtn      = document.getElementById('aiRefineAgainBtn');
+  var closeBtn      = document.getElementById('aiRefineCloseBtn');
+  var previewEl     = document.getElementById('aiRefinePreview');
+  var acceptForm    = document.getElementById('aiAcceptForm');
+  var acceptContent = document.getElementById('aiAcceptContent');
+  var errorEl       = document.getElementById('aiRefineError');
+  var remainingEl   = document.getElementById('aiRefineRemaining');
+  var remainingResEl = document.getElementById('aiRefineRemainingResult');
+
+  var currentStep    = null;
+  var currentContent = null;
+  var resumeId       = '{{ resume.id }}';
+  var csrfToken      = document.querySelector('#aiAcceptForm [name=csrfmiddlewaretoken]').value;
+
+  function showState(state) {
+    inputState.style.display   = 'none';
+    loadingState.style.display = 'none';
+    resultState.style.display  = 'none';
+    state.style.display        = 'block';
+  }
+
+  function openModal(step) {
+    currentStep    = step;
+    currentContent = null;
+    errorEl.style.display = 'none';
+    errorEl.textContent   = '';
+    showState(inputState);
+    overlay.style.display = 'flex';
+    wishEl.focus();
+  }
+
+  function closeModal() {
+    overlay.style.display = 'none';
+    currentStep    = null;
+    currentContent = null;
+  }
+
+  document.querySelectorAll('.resume-ai-btn[data-step]').forEach(function (btn) {
+    btn.addEventListener('click', function () { openModal(this.dataset.step); });
+  });
+
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeModal(); });
+  cancelBtn.addEventListener('click', closeModal);
+  closeBtn.addEventListener('click', closeModal);
+
+  wishEl.addEventListener('input', function () { wishCountEl.textContent = this.value.length; });
+
+  function updateRemaining(count) {
+    if (remainingEl)    remainingEl.textContent    = count;
+    if (remainingResEl) remainingResEl.textContent = count;
+  }
+
+  function sendRefine() {
+    errorEl.style.display = 'none';
+    showState(loadingState);
+
+    var body = new FormData();
+    body.append('wish', wishEl.value.trim());
+    body.append('csrfmiddlewaretoken', csrfToken);
+
+    fetch('/resume/' + resumeId + '/ai-section/' + currentStep + '/', { method: 'POST', body: body })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
+      .then(function (res) {
+        if (!res.ok || res.data.error) {
+          showError(res.data.error, res.data.limit);
+          return;
+        }
+        currentContent = res.data.content;
+        updateRemaining(res.data.remaining);
+        previewEl.innerHTML = renderPreview(currentStep, res.data.content);
+        showState(resultState);
+      })
+      .catch(function () { showError('network'); });
+  }
+
+  sendBtn.addEventListener('click', sendRefine);
+  againBtn.addEventListener('click', function () { showState(inputState); wishEl.focus(); });
+
+  acceptForm.addEventListener('submit', function () {
+    acceptForm.action  = '/resume/' + resumeId + '/ai-section/' + currentStep + '/accept/';
+    acceptContent.value = JSON.stringify(currentContent);
+  });
+
+  function showError(code, limit) {
+    var msg;
+    if (code === 'limit_reached') {
+      msg = 'Дневной лимит (' + (limit || '') + ' доработок) исчерпан. Попробуйте завтра.';
+    } else if (code === 'ai_failed') {
+      msg = 'AI не смог обработать секцию. Попробуйте ещё раз.';
+    } else {
+      msg = 'Ошибка соединения. Проверьте интернет и попробуйте снова.';
+    }
+    errorEl.textContent   = msg;
+    errorEl.style.display = 'block';
+    showState(inputState);
+  }
+
+  function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderPreview(step, c) {
+    if (step === 'summary') {
+      return '<p>' + esc(c.text) + '</p>';
+    }
+    if (step === 'experience') {
+      return (c || []).map(function (item) {
+        return '<div class="ai-refine-preview-item">'
+          + '<strong>' + esc(item.position) + '</strong> · ' + esc(item.company) + '<br>'
+          + '<span style="font-size:12px;color:#888;">' + esc(item.period_start) + ' — ' + esc(item.period_end) + '</span><br>'
+          + esc(item.responsibilities)
+          + (item.achievements ? '<br><em>' + esc(item.achievements) + '</em>' : '')
+          + '</div>';
+      }).join('');
+    }
+    if (step === 'education') {
+      return (c || []).map(function (item) {
+        return '<div class="ai-refine-preview-item">'
+          + '<strong>' + esc(item.institution) + '</strong><br>'
+          + esc(item.specialty) + (item.degree ? ' · ' + esc(item.degree) : '') + ' · ' + esc(item.year)
+          + '</div>';
+      }).join('');
+    }
+    if (step === 'skills') {
+      return '<p><strong>Профессиональные:</strong> ' + esc(c.hard_skills) + '</p>'
+        + (c.soft_skills ? '<p><strong>Личные:</strong> ' + esc(c.soft_skills) + '</p>' : '');
+    }
+    if (step === 'certifications') {
+      return (c || []).map(function (item) {
+        return '<div class="ai-refine-preview-item">'
+          + esc(item.name)
+          + (item.platform ? ' · ' + esc(item.platform) : '')
+          + (item.year ? ' · ' + esc(item.year) : '')
+          + '</div>';
+      }).join('');
+    }
+    return '<p>Результат получен.</p>';
+  }
+})();
 </script>
 {% endif %}
 {% endblock %}

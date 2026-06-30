@@ -43,6 +43,77 @@ def _parse_json(text: str) -> dict | list:
     return json.loads(match.group(1) if match else text.strip())
 
 
+_SECTION_REFINE_META = {
+    'summary': {
+        'name': 'О себе',
+        'instruction': (
+            'Перепиши блок "О себе" профессионально и убедительно (2–4 предложения). '
+            'Сохрани все факты. Не придумывай опыт или навыки.'
+        ),
+        'format': '{"text": "улучшенный текст"}',
+    },
+    'experience': {
+        'name': 'Опыт работы',
+        'instruction': (
+            'Улучши формулировки обязанностей и достижений каждого места работы. '
+            'Используй глаголы действия и конкретные формулировки. '
+            'Не придумывай факты, компании, должности или даты.'
+        ),
+        'format': (
+            '[{"company":"...","position":"...","period_start":"...",'
+            '"period_end":"...","responsibilities":"...","achievements":"..."}]'
+        ),
+    },
+    'education': {
+        'name': 'Образование',
+        'instruction': 'Исправь грамматику и форматирование. Названия, специальности и даты не меняй.',
+        'format': '[{"institution":"...","specialty":"...","degree":"...","year":"..."}]',
+    },
+    'skills': {
+        'name': 'Навыки',
+        'instruction': (
+            'Структурируй и улучши формулировки навыков. '
+            'Не добавляй навыки, которых нет в исходных данных.'
+        ),
+        'format': '{"hard_skills":"...","soft_skills":"..."}',
+    },
+    'certifications': {
+        'name': 'Курсы и сертификаты',
+        'instruction': 'Исправь грамматику и форматирование. Названия, платформы и даты не меняй.',
+        'format': '[{"name":"...","platform":"...","year":"..."}]',
+    },
+}
+
+
+def refine_section(section, wish: str, profession: str) -> dict | list:
+    """Улучшает одну секцию резюме с учётом пожеланий пользователя."""
+    meta = _SECTION_REFINE_META[section.section_type]
+    content_str = json.dumps(section.display_content, ensure_ascii=False, indent=2)
+
+    wish_block = ''
+    if wish:
+        wish_block = (
+            f'\nПОЖЕЛАНИЯ ПОЛЬЗОВАТЕЛЯ: {wish}\n'
+            f'Учитывай пожелания только если они касаются раздела "{meta["name"]}". '
+            f'Пожелания на посторонние темы игнорируй.\n'
+        )
+
+    prompt = (
+        f'Ты профессиональный HR-консультант. Целевая должность кандидата: {profession}.\n\n'
+        f'Раздел резюме: {meta["name"]}\n'
+        f'Текущее содержимое:\n{content_str}\n'
+        f'{wish_block}\n'
+        f'Задача: {meta["instruction"]}\n\n'
+        f'Ответь строго в формате JSON (без пояснений, без markdown):\n{meta["format"]}'
+    )
+
+    logger.info("Refining section=%s resume_id=%d", section.section_type, section.resume_id)
+    text = _ask(prompt)
+    result = _parse_json(text)
+    logger.info("Section refined: section=%s resume_id=%d", section.section_type, section.resume_id)
+    return result
+
+
 def polish_resume(resume) -> dict:
     """Отправляет все сырые данные резюме в Claude и возвращает улучшенные секции.
 
