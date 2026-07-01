@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 
 from .models import Resume, ResumeSection
 from .services import polish_resume, refine_section
@@ -53,6 +54,10 @@ def _ai_refine_increment(user):
     return used
 
 
+def _resumes_created_today(user):
+    return Resume.objects.filter(user=user, created_at__date=timezone.localdate()).count()
+
+
 @login_required
 def resume_list(request):
     if not _has_subscription(request.user):
@@ -63,10 +68,13 @@ def resume_list(request):
     ).exclude(status=Resume.STATUS_DRAFT)
 
     drafts = Resume.objects.filter(user=request.user, status=Resume.STATUS_DRAFT)
+    limit_reached = _resumes_created_today(request.user) >= request.user.interviews_limit_per_day
 
     return render(request, 'resumes/list.html', {
         'resumes': resumes,
         'drafts': drafts,
+        'limit_reached': limit_reached,
+        'limit': request.user.interviews_limit_per_day,
     })
 
 
@@ -76,6 +84,10 @@ def resume_new(request):
         return redirect('users:subscription')
 
     if request.method != 'POST':
+        return redirect('resumes:list')
+
+    if _resumes_created_today(request.user) >= request.user.interviews_limit_per_day:
+        messages.error(request, 'Дневной лимит создания резюме исчерпан. Возвращайтесь завтра.')
         return redirect('resumes:list')
 
     profession = request.POST.get('profession', '').strip()
@@ -353,7 +365,7 @@ def resume_edit_section(request, resume_id, step):
 
 
 _PHOTO_ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
-_PHOTO_ALLOWED_CONTENT_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
+_PHOTO_ALLOWED_CONTENT_TYPES = {'image/jpeg', 'image/jpg', 'image/png', 'image/webp'}
 _PHOTO_MAX_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
@@ -373,7 +385,11 @@ def resume_upload_photo(request, resume_id):
         return JsonResponse({'error': 'too_large'}, status=400)
 
     ext = os.path.splitext(photo.name)[1].lower()
-    if ext not in _PHOTO_ALLOWED_EXTENSIONS or photo.content_type not in _PHOTO_ALLOWED_CONTENT_TYPES:
+    ct = (photo.content_type or '').lower()
+    logger.debug("Photo upload: name=%r ext=%r content_type=%r size=%d", photo.name, ext, ct, photo.size)
+
+    if ext not in _PHOTO_ALLOWED_EXTENSIONS or ct not in _PHOTO_ALLOWED_CONTENT_TYPES:
+        logger.warning("Photo rejected: name=%r ext=%r content_type=%r user=%s", photo.name, ext, ct, request.user.username)
         return JsonResponse({'error': 'invalid_type'}, status=400)
 
     if resume.photo:
@@ -381,7 +397,7 @@ def resume_upload_photo(request, resume_id):
 
     resume.photo = photo
     resume.save(update_fields=['photo', 'updated_at'])
-    logger.info("Resume photo uploaded: id=%d user=%s", resume.id, request.user.username)
+    logger.info("Resume photo uploaded: id=%d user=%s content_type=%r", resume.id, request.user.username, ct)
     return JsonResponse({'url': resume.photo.url})
 
 
