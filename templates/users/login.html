@@ -5,21 +5,41 @@
 {% block content %}
 <div class="auth-card">
   <h1>Вход</h1>
-  <form method="post">
-    {% csrf_token %}
-    {% for field in form %}
-      <div class="form-group">
-        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-        {{ field }}
-        {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
-        {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+
+  <div class="settings-section">
+    <div class="settings-section-title">Данные для входа</div>
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="resume-section-field">
+        <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+        {{ form.username }}
+        {% if form.username.errors %}
+          <ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
       </div>
-    {% endfor %}
-    {% if form.non_field_errors %}
-      <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
-    {% endif %}
-    <button type="submit" class="btn">Войти</button>
-  </form>
+
+      <div class="resume-section-field">
+        <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+        {{ form.password }}
+        {% if form.password.errors %}
+          <ul class="errorlist">{% for e in form.password.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+
+      {% if form.non_field_errors %}
+        <div class="resume-section-field">
+          <ul class="errorlist">{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        </div>
+      {% endif %}
+
+      <div class="resume-section-field">
+        <button type="submit" class="btn">Войти</button>
+      </div>
+
+    </form>
+  </div>
+
   <span class="auth-link"><a href="{% url 'users:password_reset' %}">Забыли пароль?</a></span>
   <span class="auth-link">Нет аккаунта? <a href="{% url 'users:register' %}">Зарегистрироваться</a></span>
 </div>

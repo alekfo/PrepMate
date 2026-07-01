@@ -5,39 +5,72 @@
 {% block content %}
 <div class="auth-card">
   <h1>Регистрация</h1>
+
+  <div class="hp-field" aria-hidden="true">{{ form.website }}</div>
+
   <form method="post">
     {% csrf_token %}
-    <div class="hp-field" aria-hidden="true">
-      {{ form.website }}
+
+    <div class="settings-section" style="margin-bottom: 16px;">
+      <div class="settings-section-title">Аккаунт</div>
+
+      <div class="resume-section-field">
+        <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+        {{ form.username }}
+        {% if form.username.help_text %}<span class="helptext">{{ form.username.help_text }}</span>{% endif %}
+        {% if form.username.errors %}<ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <div class="resume-section-field">
+        <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+        {{ form.email }}
+        <span class="helptext">На этот адрес будет отправлено письмо с подтверждением.</span>
+        {% if form.email.errors %}<ul class="errorlist">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
     </div>
-    {% for field in form %}
-      {% if field.name != 'privacy_policy' and field.name != 'website' %}
-        <div class="form-group">
-          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-          {{ field }}
-          {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
-          {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+
+    <div class="settings-section" style="margin-bottom: 16px;">
+      <div class="settings-section-title">Пароль</div>
+
+      <div class="resume-section-field">
+        <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
+        {{ form.password1 }}
+        {% if form.password1.help_text %}<span class="helptext">{{ form.password1.help_text }}</span>{% endif %}
+        {% if form.password1.errors %}<ul class="errorlist">{% for e in form.password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+      <div class="resume-section-field">
+        <label for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>
+        {{ form.password2 }}
+        {% if form.password2.errors %}<ul class="errorlist">{% for e in form.password2.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Согласие</div>
+      <div class="resume-section-field">
+        <div class="privacy-policy-group" style="margin-bottom: 0;">
+          {{ form.privacy_policy }}
+          <label for="{{ form.privacy_policy.id_for_label }}" class="privacy-policy-label">
+            Я ознакомлен(а) с
+            <a href="{% url 'users:privacy_policy' %}" target="_blank">Политикой конфиденциальности</a>
+            и <a href="{% url 'users:public_offer' %}" target="_blank">Договором публичной оферты</a>,
+            согласен(на) с их условиями и даю согласие на обработку персональных данных
+          </label>
         </div>
-      {% endif %}
-    {% endfor %}
-
-    <div class="privacy-policy-group">
-      {{ form.privacy_policy }}
-      <label for="{{ form.privacy_policy.id_for_label }}" class="privacy-policy-label">
-        Я ознакомлен(а) с
-        <a href="{% url 'users:privacy_policy' %}" target="_blank">Политикой конфиденциальности</a>
-        и <a href="{% url 'users:public_offer' %}" target="_blank">Договором публичной оферты</a>,
-        согласен(на) с их условиями и даю согласие на обработку персональных данных
-      </label>
+        {% if form.privacy_policy.errors %}
+          <ul class="errorlist" style="margin-top: 8px;">{% for e in form.privacy_policy.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+      <div class="resume-section-field">
+        <button type="submit" id="submit-btn" class="btn" disabled>Зарегистрироваться</button>
+      </div>
     </div>
-    {% if form.privacy_policy.errors %}
-      <ul class="errorlist" style="margin-top: -8px; margin-bottom: 12px;">
-        {% for e in form.privacy_policy.errors %}<li>{{ e }}</li>{% endfor %}
-      </ul>
-    {% endif %}
 
-    <button type="submit" id="submit-btn" class="btn" disabled>Зарегистрироваться</button>
   </form>
+
   <span class="auth-link">Уже есть аккаунт? <a href="{% url 'users:login' %}">Войти</a></span>
 </div>
 
