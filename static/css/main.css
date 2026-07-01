@@ -138,11 +138,12 @@ nav a:not(.nav-brand):hover {
   color: var(--text);
   text-decoration: none;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.2s, transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 a.nav-dropdown-item:hover {
   background: var(--bg);
+  transform: translateX(4px);
 }
 
 .nav-dropdown-item--disabled {
@@ -165,6 +166,10 @@ a.nav-dropdown-item:hover {
   max-width: var(--max-width);
   margin: 56px auto;
   padding: 0 24px;
+}
+
+.page--wide {
+  max-width: 860px;
 }
 
 /* ── Typography ── */
@@ -192,7 +197,8 @@ h3 {
 .subtitle {
   font-size: 15px;
   color: var(--text-secondary);
-  margin-bottom: 36px;
+  margin-top: 4px;
+  margin-bottom: 28px;
 }
 
 /* ── Messages ── */
@@ -808,14 +814,14 @@ input:focus {
 
 /* ── Auth forms ── */
 .auth-card {
-  max-width: 380px;
+  max-width: 440px;
   margin: 80px auto;
   padding: 0 24px;
 }
 
 .auth-card h1 {
-  font-size: 22px;
-  margin-bottom: 28px;
+  font-size: 24px;
+  margin-bottom: 24px;
 }
 
 .form-group {
@@ -928,6 +934,44 @@ input:focus {
   border-top: 1px solid var(--border);
 }
 
+/* Prose content inside settings-section (about page) */
+.about-body p,
+.about-body ul {
+  font-size: 14.5px;
+  color: var(--text-secondary);
+  line-height: 1.75;
+  margin-bottom: 10px;
+}
+
+.about-body p:last-child,
+.about-body ul:last-child {
+  margin-bottom: 0;
+}
+
+.about-body ul {
+  padding-left: 20px;
+}
+
+.about-body li {
+  margin-bottom: 8px;
+}
+
+.about-body li:last-child {
+  margin-bottom: 0;
+}
+
+.about-body a {
+  color: var(--text);
+}
+
+.about-body h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+  margin-top: 4px;
+}
+
 /* ── Footer ── */
 footer {
   margin-top: auto;
@@ -984,6 +1028,11 @@ footer a:hover {
   color: var(--text-secondary);
   border-bottom: 1px solid #e4e3df;
   background: #f8f7f5;
+}
+
+.settings-section-title--mixed {
+  font-size: 12px;
+  letter-spacing: 0.05em;
 }
 
 .settings-item {
@@ -2167,32 +2216,62 @@ footer a:hover {
   letter-spacing: 0;
 }
 
-.repeating-item {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px;
-  margin-bottom: 12px;
-  background: var(--surface);
+/* ── Resume form sections (mirrors settings style) ── */
+.resume-section-field {
+  padding: 18px 24px;
+  border-bottom: 1px solid #e4e3df;
 }
 
-.repeating-item--inline {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 16px;
-  align-items: start;
+.resume-section-field:last-child {
+  border-bottom: none;
+}
+
+.resume-section-field label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.resume-section-field input[type="text"],
+.resume-section-field textarea {
+  margin-bottom: 0;
+}
+
+.resume-section-field .field-hint {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.resume-section-field--action {
+  background: #f8f7f5;
+}
+
+/* Repeating items (experience, education, languages, certifications)
+   restyled to match settings-section */
+.repeating-item {
+  border: 1px solid #e4e3df;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
 }
 
 .repeating-item-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  padding: 14px 24px;
+  background: #f8f7f5;
+  border-bottom: 1px solid #e4e3df;
 }
 
 .repeating-item-num {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
@@ -2221,6 +2300,14 @@ footer a:hover {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0 16px;
+}
+
+.period-row label {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
 }
 
 .step-actions {
@@ -2492,11 +2579,6 @@ footer a:hover {
 
 .resume-cert-item:last-child { margin-bottom: 0; }
 
-.remove-item-btn--inline {
-  grid-column: 1 / -1;
-  margin-top: 4px;
-}
-
 /* ── Mobile ── */
 @media (max-width: 600px) {
 
@@ -2556,6 +2638,19 @@ footer a:hover {
   /* Settings items → stack on mobile */
   .settings-item {
     flex-wrap: wrap;
+  }
+
+  .resume-section-field {
+    padding: 16px 18px;
+  }
+
+  .repeating-item-header {
+    padding: 12px 18px;
+  }
+
+  .period-row {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 
   .settings-btn {
