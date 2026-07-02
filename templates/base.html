@@ -62,19 +62,47 @@
 
   function activateSpinner(phrases) {
     document.getElementById('spinnerOverlay').classList.add('active');
+    var container = document.getElementById('spinnerText');
+    container.innerHTML = '';
     if (!phrases || !phrases.length) return;
-    var el = document.getElementById('spinnerText');
-    phrases = phrases.slice().sort(function() { return Math.random() - 0.5; });
-    var i = 0;
-    el.textContent = phrases[0];
-    setInterval(function () {
-      el.classList.add('fade');
-      setTimeout(function () {
-        i = (i + 1) % phrases.length;
-        el.textContent = phrases[i];
-        el.classList.remove('fade');
-      }, 300);
-    }, 2800);
+    phrases = phrases.slice().sort(function () { return Math.random() - 0.5; });
+
+    // Смена фраз реализована через CSS-анимацию (а не setInterval), потому что
+    // при обычном POST-сабмите формы страница уходит в ожидание навигации, и
+    // мобильные браузеры (в отличие от десктопных) приостанавливают JS-таймеры
+    // до ответа сервера — из-за этого фразы "зависали", хотя CSS-спиннер продолжал
+    // крутиться (его анимация идёт в compositor-потоке, а не в основном JS-потоке).
+    var n = phrases.length;
+    var slot = 2.8;   // секунд на фразу
+    var fade = 0.3;   // секунд на переход
+    var duration = n * slot;
+    var fadePct = (fade / duration) * 100;
+    var onPct = (100 / n) - fadePct;
+
+    var styleId = 'spinnerPhraseStyle';
+    var style = document.getElementById(styleId);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    style.textContent =
+      '@keyframes spinnerPhraseCycle {' +
+      '0% { opacity: 0; }' +
+      fadePct.toFixed(3) + '% { opacity: 1; }' +
+      onPct.toFixed(3) + '% { opacity: 1; }' +
+      (onPct + fadePct).toFixed(3) + '% { opacity: 0; }' +
+      '100% { opacity: 0; }' +
+      '}';
+
+    phrases.forEach(function (text, i) {
+      var span = document.createElement('span');
+      span.textContent = text;
+      span.style.animationName = 'spinnerPhraseCycle';
+      span.style.animationDuration = duration + 's';
+      span.style.animationDelay = (-i * slot) + 's';
+      container.appendChild(span);
+    });
   }
 </script>
 

@@ -36,7 +36,7 @@ users/            — кастомная модель пользователя +
   management/commands/deactivate_expired_subscriptions.py — cron-команда
 resumes/          — раздел резюме (только подписчики)
   models.py       — Resume, ResumeSection
-  views.py        — resume_list, resume_new, resume_step, resume_generate, resume_retry_ai, resume_detail
+  views.py        — resume_list, resume_new, resume_delete, resume_step, resume_generate, resume_retry_ai, resume_detail
   services.py     — polish_resume() (Claude API через прокси)
   urls.py         — маршруты /resume/
   admin.py        — ResumeAdmin, ResumeSectionAdmin
@@ -228,6 +228,7 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 
 **`evaluate_answer(question_text, answer_text, vacancy_context)`** — 1 запрос после каждого ответа.
 Возвращает `{"score": 1-10, "strengths": [...], "improvements": [...], "ideal_answer_hint": ..., "weakness_tags": [...], "strength_tags": [...]}`.
+Промпт задаёт роль «ментора» (не строгого экзаменатора) с явными ориентирами по баллам (8-10 / 5-7 / 3-4 / 1-2) — 5-7 считается нормальным ответом без деталей и примеров, а не провалом; цель — не занижать баллы за неидеальные, но по существу ответы, чтобы не ронять мотивацию кандидата. `strengths`/`improvements` при этом остаются такими же подробными, как раньше — смягчение касается только числового балла.
 
 **`generate_vacancy_advice(vacancy_profile)`** — 1 запрос при генерации/обновлении `VacancyAdvice`. Берёт данные напрямую из `Question → Feedback` (не из промежуточных summary). Передаёт историю всех сессий (дата, балл, текст вопроса, первое замечание), хронические и исправленные теги, **уровни подготовки** (`Counter` по `session.get_level_display()`). Вердикт запрашивается в формате «что работает + что блокирует + реалистичный срок». Возвращает `{"overall_progress": ..., "chronic_issues": [...], "improvements": [...], "next_steps": [...], "focus_topics": [...], "verdict": ...}`.
 
@@ -284,6 +285,7 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 - `www.prepstats.pro` → редирект на apex
 - `/static/` отдаётся напрямую из volume
 - `/favicon.ico` и `/robots.txt` — статика без access_log
+- `client_max_body_size 6m;` — иначе nginx (дефолт 1m) отклонял загрузку фото резюме (лимит 5 МБ на уровне Django) до того, как запрос доходил до приложения
 
 **CI/CD** (`.github/workflows/ci.yml`):
 - `test` job: Python 3.12, pip cache, migrate, `python manage.py test interviews --verbosity=2`
@@ -416,7 +418,7 @@ View `flashcards_train`. Принимает GET-параметры:
 
 ### Проверка IP webhook
 
-`_is_yookassa_ip(request)` в `users/views.py` — проверяет IP через `ipaddress` (стандартная библиотека). Покрывает официальный список ЮKassa: CIDR-диапазоны `185.71.76.0/27`, `185.71.77.0/27`, `77.75.153.0/25`, `77.75.154.128/25`, `2a02:5180::/32` и отдельные IP `77.75.156.11`, `77.75.156.35`. IP берётся из `X-Real-IP` (выставляется nginx), fallback — `REMOTE_ADDR`. При неверном IP возвращается `200 ok`.
+`_is_yookassa_ip(request)` в `users/views.py` — проверяет IP через `ipaddress` (стандартная библиотека). Покрывает официальный список ЮKassa: CIDR-диапазоны `185.71.76.0/27`, `185.71.77.0/27`, `77.75.153.0/25`, `77.75.154.128/25`, `2a02:5180::/32` и отдельные IP `77.75.156.11`, `77.75.156.35`. IP берётся через общий хелпер `_client_ip(request)` (`X-Real-IP` от nginx, fallback — `REMOTE_ADDR`). При неверном IP возвращается `200 ok`.
 
 ### Чеки для самозанятого
 
@@ -439,9 +441,10 @@ View `flashcards_train`. Принимает GET-параметры:
 
 ### Защита от ботов
 
-- **Honeypot**: поле `website` в `RegisterForm` — спрятано в шаблоне через CSS-класс `.hp-field` (абсолютный off-screen, не `display:none`/`visibility:hidden` — некоторые боты такие способы скрытия распознают и пропускают поле). `clean_website()` отклоняет форму без объяснения причины, если поле заполнено.
+- **Honeypot**: поле `website` в `RegisterForm` — спрятано в шаблоне через CSS-класс `.hp-field` (абсолютный off-screen, не `display:none`/`visibility:hidden` — некоторые боты такие способы скрытия распознают и пропускают поле). `clean_website()` отклоняет форму без объяснения причины, если поле заполнено. **Важно:** `{{ form.website }}` должен рендериться **внутри** `<form>` — 01.07.2026 рестайлинг регистрации случайно вынес его перед `<form>`, из-за чего поле не попадало в POST и honeypot переставал работать для всех ботов, не только headless.
 - **Одноразовые почты**: `clean_email` дополнительно проверяет домен против `_DISPOSABLE_EMAIL_DOMAINS` (mailinator, guerrillamail, 10minutemail и т.п.) в `users/forms.py`.
-- **Rate-limit**: в `register` view — не более 5 попыток регистрации в час с одного IP, счётчик в `cache` (`FileBasedCache`, ключ `register_attempts_<ip>`, TTL 3600s). IP берётся из `X-Real-IP` (nginx) с fallback на `REMOTE_ADDR`.
+- **Rate-limit**: в `register` view — не более 5 попыток регистрации в час с одного IP, счётчик в `cache` (`FileBasedCache`, ключ `register_attempts_<ip>`, TTL 3600s). IP берётся через хелпер `_client_ip(request)` в `users/views.py` (`X-Real-IP` от nginx, fallback `REMOTE_ADDR`) — используется также в `_is_yookassa_ip` и `payment_webhook`.
+- **Логирование IP**: `register` и `confirm_email` пишут IP в лог (`New user registered: ... ip=%s`, `Email confirmed for user=... ip=%s`, включая expired/invalid токен) — добавлено 02.07.2026 для диагностики паттерна бот-регистраций (один источник / ботнет / резидентные прокси).
 
 ## Важные детали
 
@@ -450,7 +453,7 @@ View `flashcards_train`. Принимает GET-параметры:
 - Logout — только POST (Django 5+), в шаблоне обёрнут в `<form method="post">`
 - `resume` view — находит первый `Question` без `UserAnswer` через `filter(answer__isnull=True)`
 - `history` view — аннотирует queryset полями `total` и `answered` через `Count` + `Q`
-- Спиннер-оверлей определён в `base.html`, активируется через `activateSpinner(phrases)` — принимает массив фраз, перемешивает случайно, меняет текст каждые 2.8s с fade-анимацией
+- Спиннер-оверлей определён в `base.html`, активируется через `activateSpinner(phrases)` — принимает массив фраз, перемешивает случайно. Смена фраз реализована через CSS `@keyframes`-анимацию (percentages считаются в JS один раз при вызове, каждая фраза — отдельный `<span>` со сдвинутым `animation-delay`), **не через `setInterval`**: при обычном POST-сабмите формы страница ждёт навигацию, и на мобильных браузерах JS-таймеры на "уходящей" странице приостанавливаются до ответа сервера (на десктопе — нет), из-за чего фразы зависали, хотя CSS-спиннер (`.spinner`, compositor-поток) продолжал крутиться
 - CSS адаптирован для мобильных через `@media (max-width: 600px)` в конце `main.css`
 - Карточки истории и блок score-card в отчёте окрашиваются по `overall_score`: `score--low` (< 2, красный), `score--mid` (2–7, жёлтый), `score--high` (> 7, зелёный) — переливающийся градиент через CSS `@keyframes score-shimmer`
 - В истории у каждой сессии под датой отображается уровень (`session.get_level_display`), если `level != 'common'`
@@ -514,6 +517,7 @@ templates/resumes/
 ```
 /resume/                              → resume_list
 /resume/new/                          → resume_new (POST)
+/resume/<id>/delete/                  → resume_delete (POST)
 /resume/<id>/step/<step>/             → resume_step (GET/POST, только для draft)
 /resume/<id>/edit/<step>/             → resume_edit_section (GET/POST, только для completed/completed_raw)
 /resume/<id>/generate/                → resume_generate (POST, вызывается из step view)
@@ -564,6 +568,18 @@ templates/resumes/
 `detail.html` показывает один из двух баннеров над резюме:
 - **`completed`** — зелёная плашка «✓ Улучшено с помощью AI»
 - **`completed_raw`** — оранжевый баннер «AI не смог обработать резюме» + кнопка «Повторно проконсультироваться с AI» → POST `/resume/<id>/retry-ai/`
+
+### Удаление резюме (`resume_delete`)
+
+`POST /resume/<id>/delete/` — проверяет владельца (`get_object_or_404(..., user=request.user)`), удаляет файл фото с диска (если есть), затем сам `Resume` (`ResumeSection` удаляется каскадно). Редиректит на `resumes:list` с `?deleted=1`.
+
+Кнопка «Удалить» показывается по-разному в зависимости от страницы:
+- **`list.html`**: только у резюме со статусом `draft` (черновики) — овальная кнопка `.badge-delete-btn` в том же стиле, что и бейдж «Черновик», только красная. У завершённых резюме (`completed`/`completed_raw`) кнопки на списке нет — удаление только со страницы резюме.
+- **`detail.html`**: обычная кнопка `.btn.btn-danger` внизу страницы, для резюме любого статуса.
+
+Перед отправкой — `confirm()` («Удалить это резюме? Это действие необратимо.»). Форма с кнопкой — не внутри `<a>` (в списке карточки — целиком `<a>`, кнопка на них не помещалась бы валидно), поэтому в структуру карточки черновика добавлена обёртка с внутренним `.resume-item-link` + отдельная `<form>`.
+
+При `?deleted=1` в query string `list.html` показывает toast `.toast.toast--success` в правом нижнем углу («Резюме удалено»), который через 2.5 сек плавно исчезает (`.toast--hide`, CSS-transition) и удаляется из DOM.
 
 ### Флоу при сбое и повторном запросе AI
 
