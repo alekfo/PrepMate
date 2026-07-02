@@ -30,15 +30,18 @@ _YOOKASSA_SINGLE_IPS = {
 }
 
 
+def _client_ip(request):
+    """IP клиента: X-Real-IP (выставляется nginx), fallback — REMOTE_ADDR."""
+    return request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR', '')
+
+
 def _is_yookassa_ip(request):
     """Проверяет, принадлежит ли IP запроса официальным сетям YooKassa.
 
-    IP берётся из X-Real-IP (выставляется nginx), fallback — REMOTE_ADDR.
     Покрывает официальные CIDR-диапазоны и отдельные адреса из документации YooKassa.
     """
-    ip_str = request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR', '')
     try:
-        ip = ipaddress.ip_address(ip_str)
+        ip = ipaddress.ip_address(_client_ip(request))
     except ValueError:
         return False
     return ip in _YOOKASSA_SINGLE_IPS or any(ip in net for net in _YOOKASSA_NETWORKS)
@@ -93,7 +96,7 @@ def register(request):
     После успешной регистрации выполняет вход и отправляет письмо подтверждения email.
     """
     if request.method == 'POST':
-        ip = request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR', '')
+        ip = _client_ip(request)
         rate_key = f'register_attempts_{ip}'
         attempts = cache.get(rate_key, 0)
         if attempts >= _REGISTER_RATE_LIMIT:
@@ -106,7 +109,7 @@ def register(request):
         if form.is_valid():
             user = form.save()
             login(request, user)
-            logger.info("New user registered: %s <%s>", user.username, user.email)
+            logger.info("New user registered: %s <%s> ip=%s", user.username, user.email, ip)
             _notify_admin_new_user(user)
             try:
                 _send_confirmation_email(user, request)
@@ -156,19 +159,20 @@ def confirm_email(request):
     При истёкшем или недействительном токене показывает сообщение об ошибке.
     """
     token = request.GET.get('token', '')
+    ip = _client_ip(request)
     try:
         data = signing.loads(token, salt='email-confirm', max_age=86400)
         User = get_user_model()
         user = User.objects.get(pk=data['uid'])
         user.email_confirmed = True
         user.save(update_fields=['email_confirmed'])
-        logger.info("Email confirmed for user=%s", user.username)
+        logger.info("Email confirmed for user=%s ip=%s", user.username, ip)
         messages.success(request, 'Email успешно подтверждён!')
     except signing.SignatureExpired:
-        logger.warning("Expired email confirmation token for token=%.20s…", token)
+        logger.warning("Expired email confirmation token for token=%.20s… ip=%s", token, ip)
         messages.error(request, 'Ссылка истекла. Запросите новое письмо.')
     except (signing.BadSignature, Exception) as e:
-        logger.warning("Invalid email confirmation token: %s", e)
+        logger.warning("Invalid email confirmation token: %s ip=%s", e, ip)
         messages.error(request, 'Недействительная ссылка подтверждения.')
     return redirect('users:settings')
 
@@ -234,7 +238,7 @@ def payment_webhook(request):
     from .services import activate_subscription
 
     if not _is_yookassa_ip(request):
-        logger.warning("Webhook from unknown IP: %s", request.META.get('HTTP_X_REAL_IP') or request.META.get('REMOTE_ADDR'))
+        logger.warning("Webhook from unknown IP: %s", _client_ip(request))
         return HttpResponse('ok')  # возвращаем 200 чтобы не раскрывать информацию
 
     try:

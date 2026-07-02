@@ -731,14 +731,25 @@ input:focus {
 }
 
 .spinner-text {
+  position: relative;
+  width: 280px;
+  max-width: 90vw;
+  min-height: 2.6em;
   font-size: 13.5px;
   color: var(--text-secondary);
   letter-spacing: -0.1px;
-  transition: opacity 0.3s ease;
 }
 
-.spinner-text.fade {
+.spinner-text span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   opacity: 0;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
 }
 
 /* ── History ── */
