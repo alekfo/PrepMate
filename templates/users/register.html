@@ -6,10 +6,10 @@
 <div class="auth-card">
   <h1>Регистрация</h1>
 
-  <div class="hp-field" aria-hidden="true">{{ form.website }}</div>
-
   <form method="post">
     {% csrf_token %}
+
+    <div class="hp-field" aria-hidden="true">{{ form.website }}</div>
 
     <div class="settings-section" style="margin-bottom: 16px;">
       <div class="settings-section-title">Аккаунт</div>
