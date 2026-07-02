@@ -232,6 +232,11 @@
 
   </div>{# /resume-doc #}
 
+  <form method="post" action="{% url 'resumes:delete' resume_id=resume.id %}" style="margin-top: 40px;" onsubmit="return confirm('Удалить это резюме? Это действие необратимо.');">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Удалить резюме</button>
+  </form>
+
 </div>
 
 {% if ai_failed %}

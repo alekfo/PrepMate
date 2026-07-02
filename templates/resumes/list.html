@@ -39,13 +39,19 @@
     <div class="settings-section-title">Незавершённые</div>
     <div class="resume-list">
       {% for r in drafts %}
-      <a href="{% url 'resumes:step' resume_id=r.id step='contacts' %}" class="resume-item resume-item--draft">
-        <div class="resume-item-main">
-          <div class="resume-item-title">{{ r.profession }}</div>
-          <div class="resume-item-date">Начато {{ r.created_at|date:"d.m.Y" }}</div>
-        </div>
-        <span class="badge">Черновик</span>
-      </a>
+      <div class="resume-item resume-item--draft">
+        <a href="{% url 'resumes:step' resume_id=r.id step='contacts' %}" class="resume-item-link">
+          <div class="resume-item-main">
+            <div class="resume-item-title">{{ r.profession }}</div>
+            <div class="resume-item-date">Начато {{ r.created_at|date:"d.m.Y" }}</div>
+          </div>
+          <span class="badge">Черновик</span>
+        </a>
+        <form method="post" action="{% url 'resumes:delete' resume_id=r.id %}" class="resume-item-delete-form" onsubmit="return confirm('Удалить это резюме? Это действие необратимо.');">
+          {% csrf_token %}
+          <button type="submit" class="badge-delete-btn">Удалить</button>
+        </form>
+      </div>
       {% endfor %}
     </div>
   </div>
@@ -77,4 +83,16 @@
   {% endif %}
 
 </div>
+
+{% if request.GET.deleted %}
+<div class="toast toast--success" id="deleteToast">Резюме удалено</div>
+<script>
+  setTimeout(function () {
+    var t = document.getElementById('deleteToast');
+    if (!t) return;
+    t.classList.add('toast--hide');
+    setTimeout(function () { t.remove(); }, 400);
+  }, 2500);
+</script>
+{% endif %}
 {% endblock %}

@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import Resume, ResumeSection
@@ -98,6 +99,22 @@ def resume_new(request):
     resume = Resume.objects.create(user=request.user, profession=profession)
     logger.info("Resume created: id=%d user=%s profession=%r", resume.id, request.user.username, profession)
     return redirect('resumes:step', resume_id=resume.id, step='contacts')
+
+
+@login_required
+def resume_delete(request, resume_id):
+    if not _has_subscription(request.user):
+        return redirect('users:subscription')
+    if request.method != 'POST':
+        return redirect('resumes:list')
+
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+    if resume.photo:
+        resume.photo.delete(save=False)
+    profession = resume.profession
+    resume.delete()
+    logger.info("Resume deleted: id=%d user=%s profession=%r", resume_id, request.user.username, profession)
+    return redirect(reverse('resumes:list') + '?deleted=1')
 
 
 @login_required
