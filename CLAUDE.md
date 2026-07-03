@@ -156,7 +156,7 @@ OneToOne → VacancyProfile. Агрегированный AI-анализ про
 /flashcards/                                → flashcards (выбор вакансии и фильтров, только подписчики)
 /flashcards/train/                          → flashcards_train (GET с параметрами фильтрации)
 
-/users/login/                               → login
+/users/login/                               → login (rate-limit: 10 неудачных попыток/час с IP, см. «Безопасность»)
 /users/logout/                              → logout (только POST)
 /users/register/                            → register
 /users/settings/                            → settings (требует login)
@@ -177,7 +177,7 @@ OneToOne → VacancyProfile. Агрегированный AI-анализ про
 /users/password-reset/<uidb64>/<token>/    → форма нового пароля
 /users/password-reset/complete/            → сброс завершён
 
-/admin/                                     → Django admin
+/admin/                                     → Django admin (rate-limit на /admin/login/, см. «Безопасность»)
 ```
 
 ## Email — подтверждение и уведомления
@@ -189,7 +189,9 @@ OneToOne → VacancyProfile. Агрегированный AI-анализ про
 - Подтверждение: `confirm_email` view верифицирует токен и выставляет `user.email_confirmed = True`
 - Flash-сообщение после отправки содержит подсказку «Если не видите — проверьте папку «Спам»»
 
-**Уведомление админу при регистрации** — `_notify_admin_new_user(user)`, `fail_silently=True`.
+**Уведомление админу при регистрации** — `_notify_admin_new_user(user)` в `users/views.py`, `fail_silently=True`.
+
+**Уведомление админу при оплате подписки** — `_notify_admin_new_payment(user, payment, sub)` в `users/services.py`, вызывается из `activate_subscription()` сразу после письма пользователю. Отправляет на `SUPPORT_EMAIL` план, сумму, `yookassa_payment_id` и дату окончания подписки. `fail_silently=True`, обёрнуто в `try/except: pass` — сбой уведомления не должен ронять активацию подписки.
 
 **Сброс пароля** — стандартный Django `PasswordResetView` с кастомными шаблонами. Письмо отправляется только если email есть в базе, но пользователю всегда показывается «письмо отправлено» (защита от перебора).
 
@@ -237,8 +239,8 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER   ← важно, иначе PasswordResetV
 ## Переменные окружения (.env)
 
 ```
-SECRET_KEY=...
-DEBUG=True
+SECRET_KEY=...              # обязателен, без дефолта — без него приложение падает при старте (см. «Безопасность»)
+DEBUG=False                 # дефолт в settings.py — False; для локальной разработки указать True явно
 ALLOWED_HOSTS=localhost,127.0.0.1
 CLAUDE_API_SERVICE_URL=https://api.fieldlog.online/ask   # прокси к Claude
 SERVICE_API_KEY=...                                      # X-API-Key для прокси
@@ -284,13 +286,31 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 - `prepstats.pro` → proxy_pass на `web:8000`, таймауты 60s/120s
 - `www.prepstats.pro` → редирект на apex
 - `/static/` отдаётся напрямую из volume
+- `/media/` **не** отдаётся напрямую — `location /protected-media/ { internal; alias /media/; }` доступен только по внутреннему редиректу от Django (см. «Безопасность»)
 - `/favicon.ico` и `/robots.txt` — статика без access_log
 - `client_max_body_size 6m;` — иначе nginx (дефолт 1m) отклонял загрузку фото резюме (лимит 5 МБ на уровне Django) до того, как запрос доходил до приложения
 
+**Важно при деплое:** `nginx.conf` смонтирован как volume (`ro`), а не собирается в образ — `docker compose up -d` не видит изменений его содержимого и не пересоздаёт контейнер `nginx`. После любого изменения `nginx/nginx.conf` нужно вручную выполнить `docker compose restart nginx` на сервере, иначе новый конфиг не подхватится.
+
 **CI/CD** (`.github/workflows/ci.yml`):
-- `test` job: Python 3.12, pip cache, migrate, `python manage.py test interviews --verbosity=2`
+- `test` job: Python 3.12, pip cache, `SECRET_KEY`/`DEBUG`/`ALLOWED_HOSTS` заданы явно через `env:` (нужно из-за отсутствия дефолта у `SECRET_KEY`), migrate, `python manage.py test interviews users --verbosity=2`
 - `deploy` job: только при `push` в `main`, SSH → dump БД → сохранить логи → `git pull` → `docker compose build --no-cache web` → `docker compose up -d`
 - Деплой запускается только после успешного прохождения тестов (`needs: test`)
+- Деплой пересоздаёт только `web` — если менялся `nginx.conf`, после деплоя нужен ручной `docker compose restart nginx` (CI это не делает)
+
+## Безопасность
+
+Хардненинг, сделанный перед запуском платной рекламы (03.07.2026):
+
+- **`SECRET_KEY` без дефолта** (`prep_mate/settings.py`) — `os.environ['SECRET_KEY']`, приложение падает при старте, если переменная не задана. Раньше был дефолт `'django-insecure-change-me-in-production'`: при сбое загрузки `.env` на проде приложение тихо продолжало бы работать с публично известным ключом — а на нём построены не только сессии/CSRF, но и токен подтверждения email (`signing.dumps(..., salt='email-confirm')`) и токены сброса пароля Django. Компрометация ключа = подделка любого из этих токенов.
+- **`DEBUG` по умолчанию `False`** (раньше был `True`) — то же соображение: отсутствие переменной в проде не должно включать вывод трейсбеков всем посетителям.
+- **`SECURE_*` настройки, активные только когда `DEBUG=False`**: `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_SSL_REDIRECT`, `SECURE_HSTS_SECONDS` (+ `INCLUDE_SUBDOMAINS`/`PRELOAD`), `SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')`. Последнее безопасно доверять, т.к. `web` не публикует порт наружу (`docker-compose.yml` без `ports:` у сервиса `web`) — до Django запрос может дойти только через nginx, который сам выставляет этот заголовок.
+- **Rate-limit на `/users/login/`** — `RateLimitedLoginView` (`users/views.py`, подключён в `users/urls.py` вместо голого `auth_views.LoginView`): не более 10 неудачных попыток входа с одного IP в час (`cache`, ключ `login_attempts_<ip>`). Считаются только неудачные попытки (`form_invalid`) — успешный вход счётчик не трогает, чтобы не блокировать общий IP (офис/NAT).
+- **Rate-limit на `/admin/login/`** — `AdminLoginRateLimitMiddleware` (`prep_mate/middleware.py`, первым после `SecurityMiddleware` в `MIDDLEWARE`): не более 5 неудачных попыток с одного IP в час. Django admin login штатно не защищён от перебора, а это самая ценная цель на сайте. Различает успех/неудачу по коду ответа admin-login view (200 = форма перерендерена с ошибкой → неудача; 302 = редирект после входа → успех).
+- **`/media/` закрыт от прямого доступа** — раньше nginx отдавал `location /media/ { alias /media/; }` всем без проверки, а там лежат фото резюме реальных людей (PII). Теперь:
+  - `nginx.conf`: `location /protected-media/ { internal; alias /media/; }` — недоступен напрямую снаружи.
+  - `resumes/views.py: resume_photo` (url `resumes:photo`, `/resume/<id>/photo/`) — проверяет `resume.user == request.user`, на проде отдаёт `X-Accel-Redirect: /protected-media/<path>` (файл гоняет nginx, не Python), в `DEBUG` (локальный `runserver` без nginx) отдаёт файл напрямую через `FileResponse`.
+  - Все ссылки на фото (`templates/resumes/detail.html`, JSON-ответ `resume_upload_photo`) ведут на `resumes:photo`, а не на `resume.photo.url` напрямую.
 
 ## Логирование
 

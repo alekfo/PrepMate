@@ -13,6 +13,7 @@ urlpatterns = [
     path('<int:resume_id>/retry-ai/', views.resume_retry_ai, name='retry_ai'),
     path('<int:resume_id>/photo/upload/', views.resume_upload_photo, name='upload_photo'),
     path('<int:resume_id>/photo/delete/', views.resume_delete_photo, name='delete_photo'),
+    path('<int:resume_id>/photo/', views.resume_photo, name='photo'),
     path('<int:resume_id>/ai-section/<str:step>/', views.resume_ai_refine_section, name='ai_refine_section'),
     path('<int:resume_id>/ai-section/<str:step>/accept/', views.resume_ai_accept_section, name='ai_accept_section'),
     path('<int:resume_id>/export/pdf/', views.resume_export_pdf, name='export_pdf'),

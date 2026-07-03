@@ -38,6 +38,14 @@
   - **Повторный прогон через AI** берёт `display_content` (а не `raw_content`), после успеха сбрасывает `user_content`
   - Flash-сообщения автоматически исчезают через 3 сек (кроме ошибок)
 
+- [x] **Хардненинг безопасности перед запуском рекламы** (03.07.2026)
+  - `SECRET_KEY` без дефолта (падение при старте вместо insecure-режима), `DEBUG` по умолчанию `False`
+  - `SECURE_SSL_REDIRECT` / `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` / `SECURE_HSTS_*` / `SECURE_PROXY_SSL_HEADER` — активны при `DEBUG=False`
+  - Rate-limit на `/users/login/` — 10 неудачных попыток/час с IP (`RateLimitedLoginView`)
+  - Rate-limit на `/admin/login/` — 5 неудачных попыток/час с IP (`AdminLoginRateLimitMiddleware`)
+  - `/media/` закрыт от прямого доступа (был публичен без авторизации — PII в фото резюме); раздача через `resumes:photo` + nginx `X-Accel-Redirect` (`location /protected-media/ { internal; }`)
+  - Подробности — `CLAUDE.md` → «Безопасность»
+
 - [x] **Защита регистрации от ботов**
   - Honeypot-поле `website` в `RegisterForm` — невидимое для людей (CSS off-screen, не `display:none`), боты заполняют все input'ы автоматически
   - Блок одноразовых почтовых доменов (`mailinator.com`, `guerrillamail.com` и др.) в `clean_email`
