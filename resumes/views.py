@@ -388,6 +388,17 @@ _PHOTO_ALLOWED_CONTENT_TYPES = {'image/jpeg', 'image/jpg', 'image/png', 'image/w
 _PHOTO_MAX_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
+def _photo_url(resume):
+    """URL фото с версией по updated_at в query string.
+
+    /resume/<id>/photo/ сам по себе не меняется между заменами фото (после
+    delete+upload файл на диске часто получает то же имя) — без версии браузер
+    кеширует ответ по URL и после замены фото продолжает показывать старое.
+    """
+    ts = int(resume.updated_at.timestamp()) if resume.updated_at else 0
+    return f"{reverse('resumes:photo', args=[resume.id])}?v={ts}"
+
+
 @login_required
 def resume_upload_photo(request, resume_id):
     if not _has_subscription(request.user):
@@ -417,7 +428,7 @@ def resume_upload_photo(request, resume_id):
     resume.photo = photo
     resume.save(update_fields=['photo', 'updated_at'])
     logger.info("Resume photo uploaded: id=%d user=%s content_type=%r", resume.id, request.user.username, ct)
-    return JsonResponse({'url': reverse('resumes:photo', args=[resume.id])})
+    return JsonResponse({'url': _photo_url(resume)})
 
 
 @login_required
@@ -433,12 +444,18 @@ def resume_photo(request, resume_id):
         raise Http404
 
     content_type = mimetypes.guess_type(resume.photo.name)[0] or 'application/octet-stream'
+    # URL версионирован через ?v=<updated_at> (см. _photo_url) — можно кешировать
+    # надолго: если фото поменяется, поменяется и версия в URL.
+    cache_control = 'private, max-age=31536000, immutable'
 
     if settings.DEBUG:
         # Локально (runserver) nginx не участвует — X-Accel-Redirect работать не будет.
-        return FileResponse(resume.photo.open('rb'), content_type=content_type)
+        response = FileResponse(resume.photo.open('rb'), content_type=content_type)
+        response['Cache-Control'] = cache_control
+        return response
 
     response = HttpResponse(content_type=content_type)
+    response['Cache-Control'] = cache_control
     response['X-Accel-Redirect'] = f'/protected-media/{resume.photo.name}'
     return response
 

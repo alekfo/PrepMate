@@ -51,7 +51,7 @@
       <div class="resume-doc-subtitle">{{ resume.profession }} — стаж {{ experience_label }}</div>
       <div class="resume-photo-area{% if not resume.photo %} resume-photo-empty{% endif %}" id="photoArea">
         {% if resume.photo %}
-        <img src="{% url 'resumes:photo' resume.id %}" alt="Фото" class="resume-photo-img">
+        <img src="{% url 'resumes:photo' resume.id %}?v={{ resume.updated_at|date:'U' }}" alt="Фото" class="resume-photo-img">
         <button class="resume-photo-delete" id="photoDeleteBtn" title="Удалить фото">×</button>
         {% else %}
         <span class="resume-photo-icon">+</span>
