@@ -6,9 +6,13 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-change-me-in-production')
+# Без дефолта: лучше падать при старте, чем тихо работать с публично известным ключом
+# (SECRET_KEY используется в т.ч. для подписи токена подтверждения email и сброса пароля)
+SECRET_KEY = os.environ['SECRET_KEY']
 
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+# Дефолт False: если .env на проде не подхватится, приложение должно упасть/отдать 500,
+# а не начать показывать всем посетителям трейсбеки с настройками и SECRET_KEY
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
@@ -26,6 +30,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'prep_mate.middleware.AdminLoginRateLimitMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -126,6 +131,20 @@ LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
 CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS if h not in ('localhost', '127.0.0.1')]
+
+# nginx термирует TLS и проксирует на gunicorn уже по обычному HTTP внутри docker-сети,
+# выставляя X-Forwarded-Proto. web-контейнер не публикует порт наружу (только nginx),
+# поэтому доверять этому заголовку безопасно — до Django он может дойти только от nginx.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# В DEBUG (локальная разработка без nginx/HTTPS) эти флаги отключены, иначе runserver
+# по http был бы неработоспособен (редирект в бесконечный цикл, cookies не отправлялись бы).
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.yandex.ru')
