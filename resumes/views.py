@@ -1,13 +1,15 @@
 import json
 import logging
+import mimetypes
 import os
 import re
 from datetime import date
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -415,7 +417,30 @@ def resume_upload_photo(request, resume_id):
     resume.photo = photo
     resume.save(update_fields=['photo', 'updated_at'])
     logger.info("Resume photo uploaded: id=%d user=%s content_type=%r", resume.id, request.user.username, ct)
-    return JsonResponse({'url': resume.photo.url})
+    return JsonResponse({'url': reverse('resumes:photo', args=[resume.id])})
+
+
+@login_required
+def resume_photo(request, resume_id):
+    """Отдаёт фото резюме только его владельцу.
+
+    /media/ в nginx закрыт (internal) — наружу фото отдаются только через этот
+    view, который проверяет владельца и на проде перекладывает раздачу на nginx
+    через X-Accel-Redirect (сам файл через Python не гоняем).
+    """
+    resume = get_object_or_404(Resume, id=resume_id, user=request.user)
+    if not resume.photo:
+        raise Http404
+
+    content_type = mimetypes.guess_type(resume.photo.name)[0] or 'application/octet-stream'
+
+    if settings.DEBUG:
+        # Локально (runserver) nginx не участвует — X-Accel-Redirect работать не будет.
+        return FileResponse(resume.photo.open('rb'), content_type=content_type)
+
+    response = HttpResponse(content_type=content_type)
+    response['X-Accel-Redirect'] = f'/protected-media/{resume.photo.name}'
+    return response
 
 
 @login_required

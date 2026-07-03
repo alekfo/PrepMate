@@ -99,7 +99,31 @@ def activate_subscription(user, payment):
         user.username, plan, sub.expires_at,
     )
     _send_subscription_activated_email(user, sub)
+    _notify_admin_new_payment(user, payment, sub)
     return sub
+
+
+def _notify_admin_new_payment(user, payment, sub):
+    """Отправляет уведомление на SUPPORT_EMAIL об успешной оплате подписки. fail_silently."""
+    plan_name = dict(sub.PLAN_CHOICES).get(sub.plan, sub.plan)
+    try:
+        send_mail(
+            subject=f"Новая оплата в PrepStats: {user.username} ({plan_name})",
+            message=(
+                f"Пользователь оформил подписку.\n\n"
+                f"Логин: {user.username}\n"
+                f"Email: {user.email or '—'}\n"
+                f"План: {plan_name}\n"
+                f"Сумма: {payment.amount} ₽\n"
+                f"YooKassa payment id: {payment.yookassa_payment_id}\n"
+                f"Действует до: {sub.expires_at.strftime('%d.%m.%Y')}"
+            ),
+            from_email=settings.EMAIL_HOST_USER,
+            recipient_list=[settings.SUPPORT_EMAIL],
+            fail_silently=True,
+        )
+    except Exception:
+        pass
 
 
 def _send_subscription_activated_email(user, sub):
