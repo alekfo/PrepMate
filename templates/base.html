@@ -28,7 +28,8 @@
         <span></span><span></span><span></span>
       </button>
       <div class="nav-dropdown" id="navDropdown">
-        <a href="{% url 'interviews:history' %}" class="nav-dropdown-item">История</a>
+        <a href="{% url 'interviews:index' %}" class="nav-dropdown-item">Пройти интервью</a>
+        <a href="{% url 'interviews:history' %}" class="nav-dropdown-item">История интервью</a>
         <a href="{% url 'interviews:statistics' %}" class="nav-dropdown-item">Менторство от AI</a>
         <a href="{% url 'interviews:flashcards' %}" class="nav-dropdown-item">Флэш-карточки</a>
         <a href="{% url 'resumes:list' %}" class="nav-dropdown-item">Резюме</a>

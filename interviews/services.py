@@ -82,12 +82,17 @@ def generate_questions(vacancy_text: str, level: str = 'common') -> list[dict]:
     """
     logger.info("Generating questions for vacancy (%d chars), level=%s", len(vacancy_text), level)
     level_instruction = _LEVEL_INSTRUCTIONS.get(level, '')
-    level_line = f'\n{level_instruction}\n' if level_instruction else ''
+    promotional_instruction = (
+        'Уровень кандидата: не задан. Сделай уровень сложности попроще и позаманчивее — '
+        'больше простых и интересных вопросов, задача заинтересовать пользователя.'
+    )
+    level_line = f'\n{level_instruction or promotional_instruction}\n'
     text = _ask(f"""Ты эксперт по техническим собеседованиям. Проанализируй вакансию и сгенерируй вопросы для интервью.
 
                         Вакансия:
                         {vacancy_text}
-{level_line}
+                        Уровень сложности:
+                        {level_line}
                         Сгенерируй 8 вопросов: 5 технических, 2 поведенческих (STAR-метод), 1 ситуационный.
                         Каждый раз генерируй уникальный набор — варьируй формулировки, углы подхода, уровень глубины и конкретности. Избегай банальных и предсказуемых вопросов.
                         Также определи название должности и компанию из текста вакансии (если указаны).
