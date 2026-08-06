@@ -1753,6 +1753,19 @@ footer a:hover {
   display: block;
 }
 
+.advice-refresh-wrap {
+  margin-bottom: 20px;
+}
+
+.advice-refresh-btn {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.advice-refresh-btn:hover {
+  opacity: 0.85;
+}
+
 /* Advice card */
 .advice-stale-banner {
   background: #fefce8;
