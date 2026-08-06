@@ -22,12 +22,16 @@
         <div class="resume-ai-banner-text">Резюме заполнено на основе ваших данных без улучшений.</div>
       </div>
     </div>
-    <form method="post" action="{% url 'resumes:retry_ai' resume_id=resume.id %}">
-      {% csrf_token %}
-      <button type="submit" class="btn" id="retryBtn" style="margin-top: 0; white-space: nowrap;">
-        Повторно проконсультироваться с AI
-      </button>
-    </form>
+    {% if request.user.is_premium %}
+      <form method="post" action="{% url 'resumes:retry_ai' resume_id=resume.id %}">
+        {% csrf_token %}
+        <button type="submit" class="btn" id="retryBtn" style="margin-top: 0; white-space: nowrap;">
+          Повторно проконсультироваться с AI
+        </button>
+      </form>
+    {% else %}
+      <a href="{% url 'users:subscription' %}" class="btn btn-secondary" style="margin-top: 0; white-space: nowrap;">Повторная AI-обработка — в Premium</a>
+    {% endif %}
   </div>
   {% else %}
   <div class="resume-ai-banner resume-ai-banner--success">
@@ -239,7 +243,7 @@
 
 </div>
 
-{% if ai_failed %}
+{% if ai_failed and request.user.is_premium %}
 <script>
   document.getElementById('retryBtn').addEventListener('click', function () {
     activateSpinner([

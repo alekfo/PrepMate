@@ -69,7 +69,9 @@ nginx/nginx.conf  — конфиг nginx: HTTPS, редирект www→apex, re
 | `email_confirmed` | BooleanField | False | Подтверждён ли email |
 | `subscription_expires_at` | DateTimeField | null | Дата истечения активной подписки |
 
-Лимиты по плану (`settings.SUBSCRIPTION_LIMITS`): `free` → 1, `subscribed` → 2, `premium` → 5.
+Лимиты по плану (`settings.SUBSCRIPTION_LIMITS`): `free` → 1, `subscribed` → 3, `premium` → 5.
+
+`interviews_limit_per_day` — общий дневной лимит, используемый не только для старта интервью, но и как порог для создания резюме (`resumes._resumes_created_today`), обновлений AI-менторства (`interviews._advice_uses_today` / `_advice_use_increment`, счётчик отдельный от лимита интервью) и AI-доработки разделов резюме (`resumes._ai_refine_uses_today`). Все три счётчика хранятся в `cache` (`FileBasedCache`), ключ вида `<prefix>_<user_id>_<date>`, TTL 86400s.
 
 ### users.Payment
 Создаётся при каждом нажатии «Купить» — до перехода на страницу YooKassa.
@@ -336,11 +338,11 @@ SUPPORT_EMAIL=...          # адрес получателя уведомлен�
 - `index` view передаёт `past_vacancies` — до 5 последних уникальных сессий (дедупликация по `vacancy_text`)
 - Dropdown «Из истории» подставляет текст вакансии в textarea через JS
 - Textarea: `rows=4`, авторастягивается (`autoGrow`), `resize: none`
-- Выбор уровня сложности (`junior` / `middle` / `pro`) — доступен только подписчикам (`is_subscribed` или `is_premium`); для остальных select задизейблен с hover-tooltip. Сервер валидирует подписку повторно в `start` view (игнорирует level если нет подписки).
+- Выбор уровня сложности (`junior` / `middle` / `pro`) — доступен всем авторизованным пользователям независимо от плана (пилюли уровня в `index.html` больше не блокируются).
 
 ## Раздел Статистика
 
-Доступен только подписчикам (`is_subscribed` или `is_premium`). Не-подписчик редиректится на `/users/subscription/`.
+Доступен всем авторизованным пользователям независимо от плана (view `statistics_overview` / `statistics_vacancy` без редиректа на `/users/subscription/`).
 
 ### Обзор вакансий (`/statistics/`)
 
@@ -354,21 +356,21 @@ View `statistics_overview`. Итерирует все `VacancyProfile` поль�
 
 View `statistics_vacancy`. Доступ: `vacancy_profile.user == request.user`.
 
-**Ленивая генерация VacancyAdvice** (при каждом визите):
-- Если `VacancyAdvice` отсутствует или `session_count_at_generation < текущее_кол-во_сессий` — вызывается `generate_vacancy_advice()`, создаётся/обновляется запись
+**Ручное обновление VacancyAdvice** — генерация больше не запускается автоматически при визите на страницу. `statistics_vacancy` (GET) только вычисляет `advice_needs_update` (`VacancyAdvice` отсутствует или `session_count_at_generation < текущее_кол-во_сессий`) и `can_refresh_advice` (`advice_needs_update` и дневной счётчик не исчерпан) и рендерит кнопку; сама генерация — отдельный view `vacancy_advice_refresh` (`POST /statistics/vacancy/<id>/refresh/`).
 - `SessionAdvice` не существует — удалено как нефункциональное (данные не отображались в UI, токены тратились впустую)
+
+**Дневной лимит на обновление** — отдельный счётчик `_advice_uses_today` / `_advice_use_increment` (cache-ключ `vacancy_advice_uses_<user_id>_<date>`, TTL 86400s), не связан со счётчиком стартов интервью. Лимит — `interviews_limit_per_day`. Попытка засчитывается сразу при клике (до вызова Claude API), чтобы сбой генерации не позволял спамить повторными кликами.
 
 **Кэш** (`django.core.cache`): используется `FileBasedCache` (`/tmp/django_cache_prepstats`) — межпроцессный, работает при нескольких gunicorn-воркерах. LocMemCache не подходит, так как каждый воркер видит только свою память.
 
 **Защита от двойных API-запросов при сбоях** (`django.core.cache`):
-- Перед вызовом `generate_vacancy_advice` в кэш пишется флаг `vacancy_advice_attempt_<id>` (TTL 5 минут)
-- Повторные визиты в течение 5 минут не триггерят новый запрос к API
-- При успешной генерации флаг удаляется немедленно (`cache.delete`)
-- Если генерация упала или кулдаун активен — в шаблон передаётся `advice_stale=True`
+- Перед вызовом `generate_vacancy_advice` в `vacancy_advice_refresh` в кэш пишется флаг `vacancy_advice_attempt_<id>` (TTL 120с) — защищает от повторного клика/сетевого ретрая, пока предыдущий запрос ещё выполняется
+- Флаг удаляется в `finally` независимо от результата генерации
 
-**Баннер устаревших данных** (`advice-stale-banner` в шаблоне):
-- Если `advice_stale=True` и `VacancyAdvice` существует → «Анализ обновляется — показаны данные предыдущих сессий»
-- Если `advice_stale=True` и `VacancyAdvice` нет → «Не удалось получить AI-анализ. Зайдите через пару минут»
+**Кнопка обновления** (`advice-refresh-btn`, зелёная, в `statistics_vacancy.html`) видна, только если `advice_needs_update=True`:
+- Если `can_refresh_advice=True` — активная форма `POST` на `vacancy_advice_refresh`, подпись «Доступно обновление по вакансии»
+- Если лимит на сегодня исчерпан — кнопка задизейблена (`.btn-blocked-wrap`), hover-tooltip показывает `advice_uses_today`/`advice_limit` и просьбу вернуться завтра
+- Если `VacancyAdvice` ещё нет вообще — под кнопкой баннер `advice-stale-banner` с подсказкой нажать кнопку выше
 
 **SVG-график** `overall_score` по сессиям (без JS-библиотек):
 - Координаты вычисляются в Python (`_build_chart_points`, `_build_chart_labels`): `pad_left=52, plot_w=536, pad_top=8, plot_h=124`, `viewBox="0 0 600 145"`
@@ -393,9 +395,19 @@ View `subscription` в `users/views.py`. Показывает три тариф�
 | `subscribed` | Недоступно | Активен | Купить — 799 ₽ |
 | `premium` | Недоступно | Недоступно | Активен |
 
+**Различие между планами** — только в дневных лимитах и двух Premium-фичах, весь остальной функционал (статистика, флэш-карточки, резюме, выбор уровня сложности) открыт всем авторизованным пользователям с самого free-плана:
+
+| | Бесплатный | Базовый | Премиум |
+|---|---|---|---|
+| Интервью / резюме / обновлений AI-менторства в день | 1 | 3 | 5 |
+| Флэш-карточки | без ограничений | без ограничений | без ограничений |
+| Выбор уровня сложности | да | да | да |
+| AI-доработка разделов резюме (`resume_retry_ai`, `resume_ai_refine_section`/`accept`) | нет | нет | да (`request.user.is_premium`) |
+| Приоритетная поддержка | нет | нет | да |
+
 ## Раздел Флэш-карточки
 
-Доступен только подписчикам (`is_subscribed` или `is_premium`). Не-подписчик редиректится на `/users/subscription/`.
+Доступен всем авторизованным пользователям без ограничений (`flashcards` / `flashcards_train` без редиректа на `/users/subscription/`).
 
 ### Страница выбора (`/flashcards/`)
 
@@ -481,7 +493,9 @@ View `flashcards_train`. Принимает GET-параметры:
 
 ## Раздел Резюме (`resumes/`)
 
-Доступен только подписчикам (`is_subscribed` или `is_premium`). Не-подписчик редиректится на `/users/subscription/`.
+Доступен всем авторизованным пользователям (без `is_subscribed`/`is_premium` гейта на список/создание/шаги опроса/детальную страницу/экспорт/фото). Создание резюме (`resume_new`) ограничено дневным лимитом `_resumes_created_today` ≤ `interviews_limit_per_day` (1/3/5 по плану).
+
+Первичная AI-полировка резюме при завершении опроса (`_run_ai_polish`, шаг `resume_step`/`resume_generate`) доступна всем. Повторный прогон целиком (`resume_retry_ai`, «Повторно проконсультироваться с AI») и точечная AI-доработка секции по формулировке пожелания (`resume_ai_refine_section` / `resume_ai_accept_section`, кнопка «Улучшить с AI» в `detail.html`) — только Premium (`request.user.is_premium`, иначе редирект на `/users/subscription/`). Точечная доработка также ограничена `_ai_refine_uses_today` ≤ `interviews_limit_per_day` в день (5 для Premium). Ручное редактирование секции без AI (`resume_edit_section`) доступно всем планам.
 
 ### Приложение `resumes/`
 

@@ -67,8 +67,7 @@ def start(request):
         return redirect('interviews:index')
 
     raw_level = request.POST.get('level', '')
-    has_subscription = request.user.is_subscribed or request.user.is_premium
-    level = raw_level if (has_subscription and raw_level in ('junior', 'middle', 'pro')) else 'common'
+    level = raw_level if raw_level in ('junior', 'middle', 'pro') else 'common'
 
     try:
         data = generate_questions(vacancy_text, level)
@@ -241,14 +240,10 @@ _TAG_LABELS = {
 
 @login_required
 def statistics_overview(request):
-    """Обзор вакансий подписчика: средний балл, тренд, топ тегов слабых мест по каждой вакансии.
+    """Обзор вакансий: средний балл, тренд, топ тегов слабых мест по каждой вакансии.
 
-    Доступно только подписчикам; остальных перенаправляет на страницу тарифов.
+    Доступно всем авторизованным пользователям.
     """
-    has_subscription = request.user.is_subscribed or request.user.is_premium
-    if not has_subscription:
-        return redirect('users:subscription')
-
     vacancies = []
 
     if True:
@@ -289,18 +284,39 @@ def statistics_overview(request):
     return render(request, 'interviews/statistics.html', {'vacancies': vacancies})
 
 
+_ADVICE_USES_CACHE_PREFIX = 'vacancy_advice_uses'
+
+
+def _advice_uses_today(user):
+    key = f'{_ADVICE_USES_CACHE_PREFIX}_{user.id}_{timezone.localdate()}'
+    return cache.get(key, 0)
+
+
+def _advice_use_increment(user):
+    key = f'{_ADVICE_USES_CACHE_PREFIX}_{user.id}_{timezone.localdate()}'
+    used = cache.get(key, 0) + 1
+    cache.set(key, used, timeout=86400)
+    return used
+
+
+def _vacancy_advice_needs_update(vacancy_profile, current_count):
+    try:
+        vacancy_advice = vacancy_profile.advice
+    except VacancyAdvice.DoesNotExist:
+        vacancy_advice = None
+    needs_update = vacancy_advice is None or vacancy_advice.session_count_at_generation < current_count
+    return vacancy_advice, needs_update
+
+
 @login_required
 def statistics_vacancy(request, vacancy_id):
     """Детальная страница вакансии: график прогресса, динамика тегов, AI-анализ (VacancyAdvice).
 
-    При каждом визите проверяет появление новых сессий и при необходимости
-    перегенерирует VacancyAdvice. Cooldown 5 минут защищает от двойных запросов к API.
-    Доступно только подписчикам.
+    Обновление VacancyAdvice больше не запускается автоматически при визите —
+    пользователь запускает его вручную кнопкой (см. vacancy_advice_refresh),
+    не более interviews_limit_per_day раз в день. Доступно всем авторизованным
+    пользователям.
     """
-    has_subscription = request.user.is_subscribed or request.user.is_premium
-    if not has_subscription:
-        return redirect('users:subscription')
-
     vacancy_profile = get_object_or_404(VacancyProfile, id=vacancy_id, user=request.user)
     completed_sessions = list(
         vacancy_profile.sessions
@@ -310,45 +326,15 @@ def statistics_vacancy(request, vacancy_id):
     )
 
     vacancy_advice = None
+    needs_update = False
+    advice_limit = request.user.interviews_limit_per_day
+    advice_uses_today = _advice_uses_today(request.user)
+    can_refresh_advice = False
 
     if completed_sessions:
         current_count = len(completed_sessions)
-        try:
-            vacancy_advice = vacancy_profile.advice
-        except VacancyAdvice.DoesNotExist:
-            vacancy_advice = None
-
-        needs_update = vacancy_advice is None or vacancy_advice.session_count_at_generation < current_count
-        cooldown_key = f"vacancy_advice_attempt_{vacancy_profile.id}"
-        advice_stale = False
-        if needs_update and not cache.get(cooldown_key):
-            cache.set(cooldown_key, True, timeout=300)
-            try:
-                data = generate_vacancy_advice(vacancy_profile)
-                fields = {
-                    'overall_progress': data.get('overall_progress', ''),
-                    'chronic_issues': data.get('chronic_issues', []),
-                    'improvements': data.get('improvements', []),
-                    'next_steps': data.get('next_steps', []),
-                    'focus_topics': data.get('focus_topics', []),
-                    'verdict': data.get('verdict', ''),
-                    'session_count_at_generation': current_count,
-                }
-                if vacancy_advice is None:
-                    vacancy_advice = VacancyAdvice.objects.create(
-                        vacancy_profile=vacancy_profile, **fields
-                    )
-                else:
-                    for k, v in fields.items():
-                        setattr(vacancy_advice, k, v)
-                    vacancy_advice.generated_at = timezone.now()
-                    vacancy_advice.save()
-                cache.delete(cooldown_key)
-            except Exception as e:
-                logger.error("generate_vacancy_advice failed: vacancy_profile=%d: %s", vacancy_profile.id, e)
-                advice_stale = True
-        elif needs_update:
-            advice_stale = True
+        vacancy_advice, needs_update = _vacancy_advice_needs_update(vacancy_profile, current_count)
+        can_refresh_advice = needs_update and advice_uses_today < advice_limit
 
     sessions_display = [
         {'session': s, 'number': len(completed_sessions) - i}
@@ -363,20 +349,82 @@ def statistics_vacancy(request, vacancy_id):
         'chart_labels': _build_chart_labels(completed_sessions),
         'tag_stats': _build_tag_stats(completed_sessions),
         'vacancy_advice': vacancy_advice,
-        'advice_stale': advice_stale,
+        'advice_needs_update': needs_update,
+        'can_refresh_advice': can_refresh_advice,
+        'advice_limit': advice_limit,
+        'advice_uses_today': advice_uses_today,
     })
+
+
+@login_required
+def vacancy_advice_refresh(request, vacancy_id):
+    """Запускает обновление VacancyAdvice по нажатию кнопки на странице вакансии.
+
+    Не более interviews_limit_per_day раз в день на пользователя (отдельный
+    счётчик, не связанный с лимитом на старт интервью). cooldown_key защищает
+    от повторной генерации при двойном клике/сетевом ретрае, пока предыдущий
+    запрос ещё выполняется.
+    """
+    if request.method != 'POST':
+        return redirect('interviews:statistics_vacancy', vacancy_id=vacancy_id)
+
+    vacancy_profile = get_object_or_404(VacancyProfile, id=vacancy_id, user=request.user)
+    current_count = vacancy_profile.sessions.filter(status='completed').count()
+    if current_count == 0:
+        return redirect('interviews:statistics_vacancy', vacancy_id=vacancy_id)
+
+    vacancy_advice, needs_update = _vacancy_advice_needs_update(vacancy_profile, current_count)
+    if not needs_update:
+        return redirect('interviews:statistics_vacancy', vacancy_id=vacancy_id)
+
+    limit = request.user.interviews_limit_per_day
+    if _advice_uses_today(request.user) >= limit:
+        messages.error(request, f'Дневной лимит обновлений AI-анализа исчерпан ({limit}/день). Возвращайтесь завтра.')
+        return redirect('interviews:statistics_vacancy', vacancy_id=vacancy_id)
+
+    cooldown_key = f"vacancy_advice_attempt_{vacancy_profile.id}"
+    if cache.get(cooldown_key):
+        messages.warning(request, 'Обновление уже выполняется, подождите немного.')
+        return redirect('interviews:statistics_vacancy', vacancy_id=vacancy_id)
+    cache.set(cooldown_key, True, timeout=120)
+
+    # Попытка засчитывается сразу, чтобы сбой генерации не позволял спамить API повторными кликами.
+    _advice_use_increment(request.user)
+    try:
+        data = generate_vacancy_advice(vacancy_profile)
+        fields = {
+            'overall_progress': data.get('overall_progress', ''),
+            'chronic_issues': data.get('chronic_issues', []),
+            'improvements': data.get('improvements', []),
+            'next_steps': data.get('next_steps', []),
+            'focus_topics': data.get('focus_topics', []),
+            'verdict': data.get('verdict', ''),
+            'session_count_at_generation': current_count,
+        }
+        if vacancy_advice is None:
+            VacancyAdvice.objects.create(vacancy_profile=vacancy_profile, **fields)
+        else:
+            for k, v in fields.items():
+                setattr(vacancy_advice, k, v)
+            vacancy_advice.generated_at = timezone.now()
+            vacancy_advice.save()
+        messages.success(request, 'AI-анализ обновлён.')
+    except Exception as e:
+        logger.error("generate_vacancy_advice failed: vacancy_profile=%d: %s", vacancy_profile.id, e)
+        messages.error(request, 'Не удалось обновить AI-анализ. Попробуйте позже.')
+    finally:
+        cache.delete(cooldown_key)
+
+    return redirect('interviews:statistics_vacancy', vacancy_id=vacancy_id)
 
 
 @login_required
 def flashcards(request):
     """Страница выбора вакансии и фильтров для тренировки флэш-карточек.
 
-    Доступно только подписчикам; показывает вакансии с хотя бы одной завершённой сессией.
+    Доступно всем авторизованным пользователям без ограничений; показывает
+    вакансии с хотя бы одной завершённой сессией.
     """
-    has_subscription = request.user.is_subscribed or request.user.is_premium
-    if not has_subscription:
-        return redirect('users:subscription')
-
     vacancies = [
         vp for vp in VacancyProfile.objects.filter(user=request.user).order_by('-created_at')
         if vp.sessions.filter(status='completed').exists()
@@ -394,11 +442,8 @@ def flashcards_train(request):
 
     Перемешивает карточки случайно; при пустом результате после фильтрации
     показывает предупреждение и возвращает на страницу выбора.
+    Доступно всем авторизованным пользователям без ограничений.
     """
-    has_subscription = request.user.is_subscribed or request.user.is_premium
-    if not has_subscription:
-        return redirect('users:subscription')
-
     vacancy_id = request.GET.get('vacancy_id')
     if not vacancy_id:
         return redirect('interviews:flashcards')

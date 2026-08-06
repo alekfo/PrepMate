@@ -36,10 +36,6 @@ SECTION_ORDER = {step: i for i, step in enumerate(RESUME_STEPS)}
 _REPEATING_STEPS = {'experience', 'education', 'languages', 'certifications'}
 
 
-def _has_subscription(user):
-    return user.is_subscribed or user.is_premium
-
-
 _AI_REFINE_SECTIONS = {'summary', 'experience', 'education', 'skills', 'certifications'}
 _AI_REFINE_CACHE_PREFIX = 'resume_ai_uses'
 _AI_REFINE_LIST_SECTIONS = {'experience', 'education', 'certifications'}
@@ -63,9 +59,6 @@ def _resumes_created_today(user):
 
 @login_required
 def resume_list(request):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
-
     resumes = Resume.objects.filter(
         user=request.user,
     ).exclude(status=Resume.STATUS_DRAFT)
@@ -83,9 +76,6 @@ def resume_list(request):
 
 @login_required
 def resume_new(request):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
-
     if request.method != 'POST':
         return redirect('resumes:list')
 
@@ -105,8 +95,6 @@ def resume_new(request):
 
 @login_required
 def resume_delete(request, resume_id):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
     if request.method != 'POST':
         return redirect('resumes:list')
 
@@ -121,9 +109,6 @@ def resume_delete(request, resume_id):
 
 @login_required
 def resume_step(request, resume_id, step):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
-
     if step not in RESUME_STEPS:
         return redirect('resumes:list')
 
@@ -274,9 +259,6 @@ def _parse_repeating(post, fields):
 
 @login_required
 def resume_generate(request, resume_id):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
-
     resume = get_object_or_404(Resume, id=resume_id, user=request.user)
 
     if resume.status != Resume.STATUS_DRAFT:
@@ -291,7 +273,7 @@ def resume_generate(request, resume_id):
 
 @login_required
 def resume_retry_ai(request, resume_id):
-    if not _has_subscription(request.user):
+    if not request.user.is_premium:
         return redirect('users:subscription')
 
     resume = get_object_or_404(Resume, id=resume_id, user=request.user)
@@ -323,9 +305,6 @@ def _run_ai_polish(resume):
 
 @login_required
 def resume_edit_section(request, resume_id, step):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
-
     if step not in RESUME_STEPS:
         return redirect('resumes:list')
 
@@ -401,8 +380,6 @@ def _photo_url(resume):
 
 @login_required
 def resume_upload_photo(request, resume_id):
-    if not _has_subscription(request.user):
-        return JsonResponse({'error': 'subscription_required'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'error': 'method_not_allowed'}, status=405)
 
@@ -462,8 +439,6 @@ def resume_photo(request, resume_id):
 
 @login_required
 def resume_delete_photo(request, resume_id):
-    if not _has_subscription(request.user):
-        return JsonResponse({'error': 'subscription_required'}, status=403)
     if request.method != 'POST':
         return JsonResponse({'error': 'method_not_allowed'}, status=405)
 
@@ -585,9 +560,6 @@ def _experience_label(items):
 
 @login_required
 def resume_detail(request, resume_id):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
-
     resume = get_object_or_404(Resume, id=resume_id, user=request.user)
 
     if resume.status == Resume.STATUS_DRAFT:
@@ -613,9 +585,6 @@ def resume_detail(request, resume_id):
 
 @login_required
 def resume_export_pdf(request, resume_id):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
-
     resume = get_object_or_404(Resume, id=resume_id, user=request.user)
 
     if resume.status == Resume.STATUS_DRAFT:
@@ -643,9 +612,6 @@ def resume_export_pdf(request, resume_id):
 
 @login_required
 def resume_export_docx(request, resume_id):
-    if not _has_subscription(request.user):
-        return redirect('users:subscription')
-
     resume = get_object_or_404(Resume, id=resume_id, user=request.user)
 
     if resume.status == Resume.STATUS_DRAFT:

@@ -55,14 +55,24 @@
       </div>
     {% endif %}
 
-    {% if advice_stale %}
-      <div class="advice-stale-banner">
-        {% if vacancy_advice %}
-          Анализ обновляется — показаны данные предыдущих сессий. Зайдите через пару минут.
+    {% if advice_needs_update %}
+      <div class="advice-refresh-wrap">
+        {% if can_refresh_advice %}
+          <form method="post" action="{% url 'interviews:vacancy_advice_refresh' vacancy.id %}" id="adviceRefreshForm">
+            {% csrf_token %}
+            <button type="submit" class="btn advice-refresh-btn" id="adviceRefreshBtn">Доступно обновление по вакансии</button>
+          </form>
         {% else %}
-          Не удалось получить AI-анализ. Зайдите через пару минут.
+          <div class="btn-blocked-wrap">
+            <button type="button" class="btn advice-refresh-btn" disabled>Доступно обновление по вакансии</button>
+            <span class="btn-tooltip">Лимит обновлений на сегодня исчерпан ({{ advice_uses_today }}/{{ advice_limit }}). Возвращайтесь завтра.</span>
+          </div>
         {% endif %}
       </div>
+    {% endif %}
+
+    {% if not vacancy_advice and advice_needs_update %}
+      <div class="advice-stale-banner">AI-анализ ещё не сгенерирован. Нажмите кнопку выше, чтобы получить его.</div>
     {% endif %}
 
     {% if vacancy_advice %}
@@ -173,4 +183,25 @@
 
   {% endif %}
 </div>
+
+{% if can_refresh_advice %}
+<script>
+  var adviceRefreshForm = document.getElementById('adviceRefreshForm');
+  if (adviceRefreshForm) {
+    adviceRefreshForm.addEventListener('submit', function () {
+      document.getElementById('adviceRefreshBtn').disabled = true;
+      activateSpinner([
+        'Перечитываем все ваши интервью по этой вакансии...',
+        'Ищем закономерности в ответах...',
+        'Сверяем прогресс с требованиями вакансии...',
+        'Отделяем разовые промахи от хронических...',
+        'Формулируем честный, но не убийственный вердикт...',
+        'Считаем, сколько ещё нужно готовиться...',
+        'Собираем персональные рекомендации...',
+        'Почти готово — дособираем анализ...',
+      ]);
+    });
+  }
+</script>
+{% endif %}
 {% endblock %}
