@@ -12,6 +12,7 @@ urlpatterns = [
     path('session/<int:session_id>/report/', views.report, name='report'),
     path('statistics/', views.statistics_overview, name='statistics'),
     path('statistics/vacancy/<int:vacancy_id>/', views.statistics_vacancy, name='statistics_vacancy'),
+    path('statistics/vacancy/<int:vacancy_id>/refresh/', views.vacancy_advice_refresh, name='vacancy_advice_refresh'),
     path('flashcards/', views.flashcards, name='flashcards'),
     path('flashcards/train/', views.flashcards_train, name='flashcards_train'),
 ]

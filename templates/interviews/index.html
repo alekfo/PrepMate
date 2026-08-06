@@ -44,24 +44,13 @@
           </div>
         {% endif %}
 
-        {% if user.is_subscribed or user.is_premium %}
-          <div class="level-pills" id="levelPills">
-            <input type="hidden" name="level" id="levelInput" value="">
-            <button type="button" class="level-pill active" data-value="">Без уровня</button>
-            <button type="button" class="level-pill" data-value="junior">Junior</button>
-            <button type="button" class="level-pill" data-value="middle">Middle</button>
-            <button type="button" class="level-pill" data-value="pro">Pro</button>
-          </div>
-        {% else %}
-          <div class="level-pills level-pills--locked" id="levelPills">
-            <input type="hidden" name="level" id="levelInput" value="">
-            <button type="button" class="level-pill active" data-value="">Без уровня</button>
-            <button type="button" class="level-pill level-pill--locked" disabled>Junior</button>
-            <button type="button" class="level-pill level-pill--locked" disabled>Middle</button>
-            <button type="button" class="level-pill level-pill--locked" disabled>Pro</button>
-            <span class="btn-tooltip">Доступно по подписке</span>
-          </div>
-        {% endif %}
+        <div class="level-pills" id="levelPills">
+          <input type="hidden" name="level" id="levelInput" value="">
+          <button type="button" class="level-pill active" data-value="">Без уровня</button>
+          <button type="button" class="level-pill" data-value="junior">Junior</button>
+          <button type="button" class="level-pill" data-value="middle">Middle</button>
+          <button type="button" class="level-pill" data-value="pro">Pro</button>
+        </div>
 
         {% if not user.email_confirmed %}
           <div class="btn-blocked-wrap">

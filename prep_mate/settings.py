@@ -113,10 +113,11 @@ CLAUDE_API_SERVICE_KEY = os.environ.get('SERVICE_API_KEY', '')
 YOOKASSA_SHOP_ID = os.environ.get('YOOKASSA_SHOP_ID', '')
 YOOKASSA_SECRET_KEY = os.environ.get('YOOKASSA_SECRET_KEY', '')
 
-# Интервью в день по плану (free / subscribed / premium)
+# Интервью в день по плану (free / subscribed / premium) — используется как общий
+# дневной лимит и для интервью, и для резюме, и для обновлений AI-менторства
 SUBSCRIPTION_LIMITS = {
     'free': 1,
-    'subscribed': 2,
+    'subscribed': 3,
     'premium': 5,
 }
 
