@@ -40,3 +40,4 @@ volumes:
   postgres_data:
   static_files:
   media_files:
+  quiz_static_files:
