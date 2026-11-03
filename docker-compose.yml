@@ -30,6 +30,7 @@ services:
       - static_files:/static
       - media_files:/media
       - quiz_static_files:/static-quiz
+      - quiz_media_files:/media-quiz
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
     depends_on:
@@ -42,3 +43,5 @@ volumes:
   media_files:
   quiz_static_files:
     name: quiz_static_files
+  quiz_media_files:
+    name: quiz_media_files
