@@ -41,3 +41,4 @@ volumes:
   static_files:
   media_files:
   quiz_static_files:
+    name: quiz_static_files
