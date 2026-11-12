@@ -59,3 +59,4 @@ jobs:
             git pull origin main
             docker compose build --no-cache web
             docker compose up -d
+            docker exec prepmate-nginx-1 nginx -s reload
